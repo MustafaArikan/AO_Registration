@@ -202,10 +202,10 @@ def apply_displacements(framestack,displacements):
     if max(y_shifts) > 0:
         bottom = max(y_shifts)
         
-    output = np.zeros((nframes,
+    output = np.ones((nframes,
                       nrows + top + bottom+1,
                       ncols + left + right+1),
-                      dtype = np.float)
+                      dtype = np.float) * -1
     
     for idx in range(framestack.shape[0]):
         if displacements[idx][0] < 0:
@@ -219,6 +219,11 @@ def apply_displacements(framestack,displacements):
             topIndex = top + displacements[idx][1]
         
         output[idx,topIndex:topIndex + nrows, leftIndex : leftIndex + ncols] = framestack[idx,:,:]
+        
+        #find the points where all images overlap
+    map = output.min(0)
+    [r,c] = np.where(map>-1)
+    output = output[:,min(r):max(r)+1,min(c):max(c)+1]  #crop the output to just the overlapping region
         
     return output
 
