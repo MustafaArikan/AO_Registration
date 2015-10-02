@@ -4,6 +4,7 @@ import AoRegistration.StackTools as stackTools
 import numpy as np
 
 vid = AoRecording.AoRecording(filepath='data/sample.avi')
+vid.load_video()
 
 def setup():
     print "SETUP!"
@@ -15,8 +16,10 @@ def teardown():
 def test_basic():
     print "I RAN!"
 
-@with_setup(setup)    
+
 def test_load_video():
+    vid = AoRecording.AoRecording(filepath='data/sample.avi')
+    vid.load_video(cropInterlace=False)
     assert_equal(vid.nframes,32)
     assert_equal(vid.frameheight,1024)
     assert_equal(vid.framewidth,1000)

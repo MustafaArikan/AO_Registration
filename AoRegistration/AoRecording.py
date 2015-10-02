@@ -45,9 +45,6 @@ class AoRecording:
         self.filterResults = None
         self.timeTics = None
         
-        if filepath is not None:
-            self.load_video()
-
     def get_masked(self):
         #returns an np.maskedarray type
         if self.mask is None:
