@@ -1,0 +1,145 @@
+# author: Tom Wright
+# website: tomwright.ca
+
+# based on code by:
+# author:    Adrian Rosebrock
+# website:   http://www.pyimagesearch.com
+
+
+import cv2
+import numpy as np
+
+class ClickCropper:
+    '''ClickCropper
+    Object to support function click_and_crop()'''
+    def __init__(self, image):
+        self.image = image
+        self.image_rectangle = image.copy()
+        self.positions = []
+        self.state = None
+
+    def mouse_callback(self, event, x, y, flags, param):
+        # Saving the click coordinates
+        if event == cv2.EVENT_LBUTTONUP:
+            if not self.state:
+                self.state = "clicked"
+                self.positions.append((x, y))
+            elif self.state == "clicked":
+                self.positions.append((x, y))
+                self.state = "double_clicked"
+
+        # Showing the selected area in real time
+        # with green rectangle
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.state == "clicked":
+                self.image_rectangle = self.image.copy()
+                x1, y1 = self.positions[0]
+                cv2.rectangle(self.image_rectangle, (x1, y1), (x, y), (0, 255, 0), 2)
+
+        # Canceling the selection if right clicked
+        elif event == cv2.EVENT_RBUTTONUP:
+            if self.state == "double_clicked":
+                self.image_rectangle = self.image.copy()
+                self.positions = []
+                self.state = None
+
+    def crop(self):
+        coords = self.roi()
+        x1, y1 = coords[0]
+        x2, y2 = coords[1]
+
+        return self.image[y1:y2, x1:x2]
+    
+    def mask(self):
+        coords = self.roi()
+        x1, y1 = coords[0]
+        x2, y2 = coords[1]        
+        
+        mask = np.zeros(self.image.shape)
+        mask[y1:y2, x1:x2] = 1
+        return mask
+    
+    def roi(self):
+        '''Returns roi coordinates'''
+        if len(self.positions) != 2:
+            return None
+        
+        x1, y1 = self.positions[0]
+        x2, y2 = self.positions[1]
+    
+        # Swapping coordinates if selected from
+        # right-to-left or bottom-to-top
+        if x1 > x2:
+            x1, x2 = x2, x1
+    
+        if y1 > y2:
+            y1, y2 = y2, y1        
+            
+        return [(x1,y1), (x2,y2)]
+
+def click_and_crop(image, types='roi'):
+    '''Displays image allowing user to select a rectangle ROI
+    returns the cropped image
+    USAGE:
+    
+    mask=tools.click_and_crop(np.ones((500,500)),types=['mask'])
+    cv2.imshow(mask['mask'])
+    
+    PARAMS:
+    image - an ndarray
+    type ['roi' | 'mask' | 'crop'] - what to return, see details
+    
+    DETAILS:
+    Left click to start selecting the region, left click again to finish
+    Right click to reset
+    'c' key to return
+    'q' key to quit
+    type param can take values:
+    roi - returns the coordinates [(x1,y1),(x2,y2)]
+    mask - returns a ndarray of same size as image with 1's in the selected region
+    crop - returns the cropped image
+    '''
+    cropper = ClickCropper(image)
+    cv2.namedWindow("Cropper")
+    cv2.setMouseCallback("Cropper", cropper.mouse_callback)
+
+    while True:
+        cv2.imshow("Cropper", cropper.image_rectangle)
+
+        key = cv2.waitKey(1) & 0xFF
+
+        if key is ord('q'):
+            cv2.destroyWindow("Cropper")
+            return image
+        elif key is ord('c'):
+            cropped_image = cropper.crop()
+
+            if cropped_image is not None:
+                cv2.destroyWindow("Cropper")
+                output = {}
+                for _type in types:
+                    if _type == 'roi':
+                        output['roi'] = cropper.roi()
+                    elif _type == 'mask':
+                        output['mask'] = cropper.mask()
+                    elif _type == 'crop':
+                        output['crop'] = cropper.crop()
+
+                return output
+            
+def padd_image(image,padding):
+    """Padds an image with random noise with similar mean + deviation
+    PARAMS:
+    image - an NxM image
+    padding (left,top,right,bottom) in pixels
+    """
+    assert len(image.shape) ==2, "Invalid image size, expect NxM"
+    left,top,right,bottom = padding
+    output = np.random.randn(image.shape[0] + top + bottom,
+                             image.shape[1] + left + right)
+    output = image.std() * output + image.mean()
+    
+    output[top:top+image.shape[0],
+           left:left+image.shape[1]] = image
+    
+    return output
