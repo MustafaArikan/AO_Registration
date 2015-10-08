@@ -8,6 +8,7 @@
 
 import cv2
 import numpy as np
+import scipy.signal
 
 class ClickCropper:
     '''ClickCropper
@@ -126,6 +127,17 @@ def click_and_crop(image, types='roi'):
                         output['crop'] = cropper.crop()
 
                 return output
+
+def write_image(filename,image,normalise=False):
+    assert len(image.shape) < 3, 'Only support for grayscale images is enabled'
+    if normalise:
+        if not image.dtype == np.float:
+            image=image.astype(np.float)
+        image = image + image.min()
+        image = image / image.max()
+        image = image * 255
+        image = image.astype('uint8')
+    cv2.imwrite(filename,image)
             
 def padd_image(image,padding):
     """Padds an image with random noise with similar mean + deviation
@@ -143,3 +155,71 @@ def padd_image(image,padding):
            left:left+image.shape[1]] = image
     
     return output
+
+def comatrix(image):
+    """Calculate the 2D covariace matrix for an image
+    """
+    height, width = image.shape
+    
+    nullKernel = np.zeros((7,7))
+    smallAverageKernel = np.ones((7,7))
+    
+    k1 = np.zeros((7,7))
+    np.copyto(nullKernel,k1)
+    k1[3,3] = 1
+    k1[0,6] = -1
+    
+    k2 = np.zeros((7,7))
+    np.copyto(nullKernel,k2)
+    k2[3,3] = 1
+    k2[0,3] = -1
+    
+    k3 = np.zeros((7,7))
+    np.copyto(nullKernel,k3)    
+    k3[3,3] = 1
+    k3[3,6] = -1
+
+    k4 = np.zeros((7,7))
+    np.copyto(nullKernel,k4)    
+    k4[3,3] = 1
+    k4[3,0] = -1
+
+    k5 = np.zeros((7,7))
+    np.copyto(nullKernel,k5)
+    k5[3,3] = 1
+    k5[6,6] = -0.14
+    k5[5,5] = -0.86
+
+    k6 = np.zeros((7,7))
+    np.copyto(nullKernel,k6)    
+    k6[3,3] = 1
+    k6[0,0] = -0.14
+    k6[1,1] = -0.86
+
+    k7 = np.zeros((7,7))
+    np.copyto(nullKernel,k7)    
+    k7[3,3] = 1
+    k7[6,0] = -0.14
+    k7[5,1] = -0.86
+
+    k8 = np.zeros((7,7))
+    np.copyto(nullKernel,k8)    
+    k8[3,3] = 1
+    k8[0,6] = -0.14
+    k8[1,5] = -0.86
+    
+    contrastM = scipy.signal.convolve2d(imageWorking,k1,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k2,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k3,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k4,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k5,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k6,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k7,'same')**2
+    contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k8,'same')**2
+    
+    imageWorking = imageWorking / scipy.signal.convolve2d(imageWorking,np.ones((7,7)),'same')
+    contrastM = contrastM / imageWorking**2
+    
+    cov=scipy.signal.convolve2d(contrastM, np.ones((5,5)), 'same')
+    
+    return cov

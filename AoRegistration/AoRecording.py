@@ -44,6 +44,7 @@ class AoRecording:
         self.templateFrame = None
         self.filterResults = None
         self.timeTics = None
+        self.currentStack = None
         
     def get_masked(self):
         #returns an np.maskedarray type
@@ -122,6 +123,7 @@ class AoRecording:
             data = data[:,:,left:right]
             
         self.data=data
+        self.currentStack = data
         
 
     def write_video(self,fpath):
@@ -139,6 +141,10 @@ class AoRecording:
             vid.write(frame)
         
         vid.release()              
+        
+    def write_average_frame(self,filename):
+        assert self.currentAverageFrame is not None,'Average frame not created'
+        ImageTools.write_image(filename, self.currentAverageFrame)
         
     def filter_frames(self):
         '''Perform an initial filtering on a frame set
@@ -256,6 +262,7 @@ class AoRecording:
         self.goodFrames = [result['frameid'] for result in results] #
         
         self.alignedData = StackTools.apply_displacements(self.data[self.goodFrames,:,:],self.fixedDisplacements)
+        self.currentStack = self.alignedData
         
     def complete_align(self):
         """Takes a roughly aligned stack and performs a complete alignment
@@ -341,6 +348,7 @@ class AoRecording:
         self.timeTics = np.array(timetics)
         self.times = newCoords['times']
         self.alignmentSplines = self._make_valid_points(results)
+        self.fast_align()
 
     def _make_valid_points(self,displacements):
         """Takes the displacements created by complete_align() and converts them into a series of fitted splines
@@ -488,9 +496,6 @@ class AoRecording:
         times = newCoords['times']
         times = times.reshape(times.size)
         
-        
-        
-        
         for frame in self.alignmentSplines:
             frameIdx = self.goodFrames.index(frame['frameid'])
             print frameIdx
@@ -522,3 +527,12 @@ class AoRecording:
             outstack[frameIdx] = tmpFrame
             
         self.completeAlignedData = outstack
+        self.currentStack = self.completeAlignedData
+        
+    def create_average_frame(self,type='mean'):
+        assert type in ['lucky','mean']
+        if type == 'lucky':
+            #creating a lucky average
+            self.currentAverageFrame = StackTools.compute_lucky_image(self.currentStack)
+        else:
+            self.currentAverageFrame = self.currentStack.mean(axis=0)

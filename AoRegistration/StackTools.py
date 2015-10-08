@@ -227,7 +227,32 @@ def apply_displacements(framestack,displacements):
         
     return output
 
+def compute_lucky_image(stack):
+    '''Use the 'lucky' algorithm to compute an average frame from an aligned stack
 
+    Original Code Gang Huang, Indiana University, 2010
+       revised to use convolution by Steve Burns, 2012
+       Indiana University
+    this code may be freely distributed and used in publications with attribution to the original paper
+    reference Huang, G., Zhong, Z. Y., Zou, W. Y., and Burns, S. A., Lucky averaging: quality improvement of adaptive optics scanning laser ophthalmoscope images, Optics Letters 36, 3786-3788 (2011).
+    '''
+    nFrames, height, width = stack.shape
     
+    numFinal = 15 
+    covStack = np.empty_like(stack.shape) #stack to hold covariance matrices
+    imageStackSorted = np.empty((numFinal),height,width)
     
+    for iFrame in range(nFrames):
+        covStack[iFrame,:,:] = ImageTools.comatrix(covStack[iFrame,:,:])
+        
+    covStackSortIndex = covStack.argsort(0)
+    covStackSortIndex[:] = covStackSortIndex[::-1] #reverse the sort
     
+    #now resort the image stack so that each pixel in the stack is sorted with the highest contrast pixels in the first frame
+    for iRow in range(height):
+        for iCol in range(width):
+            imageStackSorted[:,iRow,iCol] = stack[covStackSortIndex[0:numFinal,iRow,iCol],iRow,iCol]
+            
+    finalImage = imageStackSorted.mean(axis=0)
+    return finalImage
+        
