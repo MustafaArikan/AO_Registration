@@ -41,3 +41,6 @@ vid.write_video('output/output.avi')
 $ nosetests
 
 ```
+
+## Notes
+scipy.signal.correlate2d is slow as molases.
