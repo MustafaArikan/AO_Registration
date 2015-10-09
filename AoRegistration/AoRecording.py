@@ -4,9 +4,9 @@ import cv2
 import logging
 import scipy
 import scipy.interpolate
-
 import ImageTools
 import StackTools
+import CompleteAlignParallel
 
 logger = logging.getLogger(__name__)
 
@@ -266,9 +266,6 @@ class AoRecording:
         
     def complete_align(self):
         """Takes a roughly aligned stack and performs a complete alignment
-        PARAMS:
-        framestack - nFrames x Height x Width ndarray
-        idxTargetFrame - the index of the target frame in the framestack to align to.
         """        
         if self.goodFrames is None or self.templateFrame is None:
             logging.warning('filterframes not run first')        
@@ -349,6 +346,44 @@ class AoRecording:
         self.times = newCoords['times']
         self.alignmentSplines = self._make_valid_points(results)
         self.fast_align()
+
+    def complete_align_parallel(self):
+        nFrames, nrows, ncols = self.alignedData.shape
+        newCoords = self._get_coords(nrows, ncols)
+
+        #setup the row indices
+        defaultStep = int((nrows - self.smallSzRow + 1) / (self.numberPointsToAlign))
+        smallRowStart = np.array(range(self.numberPointsToAlign)) * defaultStep
+    
+        #the large rows should be centered on the small rows
+        halfDifference = int((self.largeSzRow - self.smallSzRow) / 2)
+        largeRowStart = smallRowStart - halfDifference # this gives some values out of bounds
+        largeRowStart[largeRowStart < 0] = 0
+        maxRowStart = nrows - self.largeSzRow
+        largeRowStart[largeRowStart > maxRowStart] = maxRowStart
+    
+        smallColStart = (ncols / 2) - (self.smallSzCol / 2)
+        largeColStart = (ncols / 2) - (self.largeSzCol / 2)
+        print 'starting parallel'
+        CompleteAlignParallel.complete_align_parallel(self.alignedData, self.goodFrames, 
+                                                     self.templateFrame,
+                                                     (smallRowStart,largeRowStart),
+                                                     (smallColStart,largeColStart),
+                                                     (self.smallSzRow,self.largeSzRow), 
+                                                     (self.smallSzCol,self.largeSzCol))
+
+        
+            
+        timetics=[]
+        for jndx in range(self.numberPointsToAlign):
+            timetics.append(newCoords['times'][(smallRowStart[jndx]+int(self.smallSzRow/2)),
+                                               (smallColStart+int(self.smallSzCol/2)-1)])
+    
+        self.timeTics = np.array(timetics)
+        self.times = newCoords['times']
+        self.alignmentSplines = self._make_valid_points(CompleteAlignParallel.results)
+        self.fast_align()
+
 
     def _make_valid_points(self,displacements):
         """Takes the displacements created by complete_align() and converts them into a series of fitted splines
@@ -494,7 +529,7 @@ class AoRecording:
         newCoords = self._get_coords(self.alignedData.shape[1],
                                      self.alignedData.shape[2])
         times = newCoords['times']
-        times = times.reshape(times.size)
+        times = times.ravel()
         
         for frame in self.alignmentSplines:
             frameIdx = self.goodFrames.index(frame['frameid'])
