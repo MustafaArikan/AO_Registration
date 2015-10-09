@@ -7,6 +7,7 @@ import scipy.interpolate
 import ImageTools
 import StackTools
 import CompleteAlignParallel
+import FastAlignParallel
 
 logger = logging.getLogger(__name__)
 
@@ -348,6 +349,7 @@ class AoRecording:
         self.fast_align()
 
     def complete_align_parallel(self):
+
         nFrames, nrows, ncols = self.alignedData.shape
         newCoords = self._get_coords(nrows, ncols)
 
@@ -364,7 +366,7 @@ class AoRecording:
     
         smallColStart = (ncols / 2) - (self.smallSzCol / 2)
         largeColStart = (ncols / 2) - (self.largeSzCol / 2)
-        print 'starting parallel'
+        logging.debug('Starting parallel alignment')
         CompleteAlignParallel.complete_align_parallel(self.alignedData, self.goodFrames, 
                                                      self.templateFrame,
                                                      (smallRowStart,largeRowStart),
@@ -382,7 +384,7 @@ class AoRecording:
         self.timeTics = np.array(timetics)
         self.times = newCoords['times']
         self.alignmentSplines = self._make_valid_points(CompleteAlignParallel.results)
-        self.fast_align()
+        self.fast_align_parallel()
 
 
     def _make_valid_points(self,displacements):
@@ -503,6 +505,17 @@ class AoRecording:
         times = times.T
         return {'rowlocs':rowlocs,'collocs':collocs,'times':times,'FrameTimeIncrement':frameTime}
         
+    def fast_align_parallel(self):
+        newCoords = self._get_coords(self.alignedData.shape[1],
+                                     self.alignedData.shape[2]) 
+        FastAlignParallel.fast_align_parallel(self.alignedData,
+                                              self.alignmentSplines,
+                                              self.goodFrames,
+                                              self.templateFrame,
+                                              newCoords)
+        self.completeAlignedData = FastAlignParallel.outstack
+        self.currentStack = self.completeAlignedData
+        
     def fast_align(self):
         outputmargin = 30
         
@@ -533,7 +546,7 @@ class AoRecording:
         
         for frame in self.alignmentSplines:
             frameIdx = self.goodFrames.index(frame['frameid'])
-            print frameIdx
+            logging.debug('Aligning frame{}'.format(frameIdx))
             srcImg = self.alignedData[frameIdx,:,:] * mask
             srcImg = srcImg + ((srcImg==0) * -1)
             

@@ -69,7 +69,7 @@ def _complete_align_frame(image,frameid):
         #displacement['coords'] = (coords[0] + largeRowStart[idxStrip],
                                   #coords[1] + largeColStart)
         result['stripResults'].append(displacement)
-    print 'done parallel frame{}'.format(frameid)
+    logger.debug('done parallel frame{}'.format(frameid))
     return result
 
 

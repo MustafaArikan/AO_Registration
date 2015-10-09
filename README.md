@@ -1,6 +1,9 @@
 # AO_Registration
 Code for registering video output from high-resolution retinal imaging systems
 
+## Notes
+Added parallel processing, reduced times for a 32 frame video (30 good frames) from 80 seconds to ~45 seconds.
+
 ## Funding
 
 Canadian Institute for Heath Research grant 106560
@@ -31,9 +34,15 @@ vid = AoRecording.AoRecording(filepath='data/sample.avi')
 vid.load_video()
 vid.filter_frames()
 vid.fixed_align_frames()
-vid.complete_align()
+#vid.complete_align() #for serial processing
+vid.complete_align_parallel() # for parallel processing
 vid.fast_align()
 vid.write_video('output/output.avi')
+```
+
+From the command line:
+```
+$ python example.py -v
 ```
 
 ## Testing
