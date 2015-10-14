@@ -223,3 +223,30 @@ def comatrix(image):
     cov=scipy.signal.convolve2d(contrastM, np.ones((5,5)), 'same')
     
     return cov
+
+def unsharp(image,size,stdDevScale):
+    '''Perform an unsharp mask on an image
+    '''
+    if not type(image)==np.ndarray:
+        image=np.array(image)
+    assert len(image.shape)==2, 'Expected an height x width image'
+    image[image<0]=0
+    
+    h = np.ones((size,size))
+    h = h / size**2
+    imLow = scipy.signal.convolve2d(image,h,'same')
+    imAvg = image.mean()
+    result = (image - imLow) + imAvg
+    avgResult = result.mean()
+    stdResult = result.std()
+    
+    result = result - (avgResult - (stdResult * stdDevScale))
+    result = result / (avgResult + (stdResult * stdDevScale))
+    
+    
+    #I think this is the same as the matlab function imadjust(result,[0 1],[0 1])
+    result[result < 0] = 0
+    result[result > 1] = 2
+    
+    return result
+    

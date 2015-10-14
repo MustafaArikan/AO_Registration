@@ -8,6 +8,7 @@ import ImageTools
 import StackTools
 import CompleteAlignParallel
 import FastAlignParallel
+import ComputeStdevImage
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class AoRecording:
         self.filterResults = None
         self.timeTics = None
         self.currentStack = None
+        self.currentStdevFrame = None
         
     def get_masked(self):
         #returns an np.maskedarray type
@@ -146,6 +148,15 @@ class AoRecording:
     def write_average_frame(self,filename):
         assert self.currentAverageFrame is not None,'Average frame not created'
         ImageTools.write_image(filename, self.currentAverageFrame)
+        
+    def write_frame(self,filename,frameTypes):
+        for frameType in frameTypes:
+            assert frameType in ['average','stdev']
+            if frameType == 'average':
+                self.write_average_frame(filename)
+            if frameType == 'stdev':
+                assert self.currentStdevFrame is not None, 'Stdev frame not created'
+                ImageTools.write_image(filename,self.currentStdevFrame)
         
     def filter_frames(self):
         '''Perform an initial filtering on a frame set
@@ -584,3 +595,6 @@ class AoRecording:
             self.currentAverageFrame = StackTools.compute_lucky_image(self.currentStack)
         else:
             self.currentAverageFrame = self.currentStack.mean(axis=0)
+            
+    def create_stdev_frame(self):
+        self.currentStdevFrame = ComputeStdevImage.compute_stdev_image(self.currentStack)

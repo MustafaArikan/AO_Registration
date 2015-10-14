@@ -16,9 +16,14 @@ def main():
     vid.create_average_frame()
     toc = timeit.default_timer()
     print 'Parallel Process took {}:'.format(toc-tic)
+
+
+    vid.create_stdev_frame()
+
     logging.info('writing output')
     vid.write_video('output/output_parallel.avi')
     vid.write_average_frame('output/lucky_average_parallel.png')
+    vid.write_frame('output/lucky_stdev.png','stdev')
 
     
     logging.info('Starting serial processing')
@@ -32,8 +37,7 @@ def main():
     
     logging.info('writing output')
     vid.write_video('output/output_serial.avi')
-    vid.write_average_frame('output/lucky_average_serial.png')
-
+    vid.write_frame('output/lucky_average_serial.png','average')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = 'Register frames from an AO video')

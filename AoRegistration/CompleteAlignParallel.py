@@ -19,6 +19,7 @@ sharedSmallSzCol = None
 sharedLargeSzCol = None
 
 def _complete_align_parallel_callback(result):
+    logger.debug('callback called')
     results.append(result)
 
 def _complete_align_frame(image,frameid):

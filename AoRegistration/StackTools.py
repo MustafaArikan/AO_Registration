@@ -6,6 +6,7 @@ import scipy
 import scipy.signal
 import cv2
 import logging
+import multiprocessing
 
 import ImageTools
 
@@ -255,4 +256,15 @@ def compute_lucky_image(stack):
             
     finalImage = imageStackSorted.mean(axis=0)
     return finalImage
-        
+
+def getMaskedStack(stack):
+    '''returns the stack as an np.maskedarray
+    pixels with values of -1 in any frame are masked
+    '''
+    
+    mask = stack.min(axis=0) < 0
+    mask = np.tile(mask,[stack.shape[0],1,1])
+    return np.ma.masked_array(stack,mask)
+    
+
+    
