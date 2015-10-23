@@ -30,6 +30,9 @@ class AoRecording:
     minCorrel = 0.38 # Used by make_valid_points .38 is OK for cones, other structures need lower values
     maxStdDist = 49 # max allowable variance (std) in distances moved
     maxDist = 20    # max allowable distance of deviation in pixels
+    
+    
+
     def __init__(self,filepath=None):
         """Initialse an AoRecording object
         PARAMS: 
@@ -48,7 +51,8 @@ class AoRecording:
         self.timeTics = None
         self.currentStack = None
         self.currentStdevFrame = None
-        
+        self.currentAverageFrame = None
+        self.b_continue = 1 # flag to check if an error in processing has occurred
     def get_masked(self):
         #returns an np.maskedarray type
         if self.mask is None:
@@ -131,6 +135,9 @@ class AoRecording:
 
     def write_video(self,fpath):
         '''Write the current output to an avi'''
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return        
         nframes, height,width = self.completeAlignedData.shape
         #fourcc = cv2.cv.CV_FOURCC(*'XVID')
         fourcc = cv2.cv.CV_FOURCC(*'I420')
@@ -147,9 +154,17 @@ class AoRecording:
         
     def write_average_frame(self,filename):
         assert self.currentAverageFrame is not None,'Average frame not created'
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return        
         ImageTools.write_image(filename, self.currentAverageFrame)
         
     def write_frame(self,filename,frameTypes):
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return      
+        if isinstance(frameTypes,str):
+            frameTypes = [frameTypes]
         for frameType in frameTypes:
             assert frameType in ['average','stdev']
             if frameType == 'average':
@@ -161,7 +176,12 @@ class AoRecording:
     def filter_frames(self):
         '''Perform an initial filtering on a frame set
         [goodframes,template] = filterFrames(framestack)
+        returns the number of good frames, this can be used for error checking later
         '''
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return
+        
         framestack = self.data
         
         # calculate mean brightness for each frame, 
@@ -204,7 +224,10 @@ class AoRecording:
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords'],
                             'motion':motion})
-            
+        if len(results) < 1:
+            logger.debug("No good frames found")
+            self.b_continue = 0
+            return
         #data for frame 0 is missing, use the data from frame 1
         r=[r for r in results if r['frameid'] == 1]
         r=dict(r[0])    #make a copy of this item
@@ -219,16 +242,21 @@ class AoRecording:
             #all correlations are crummy, just bail
             #TODO
             logger.debug('No good frames found')
-            pass
+            self.b_continue = 0
         else:
             self.goodFrames = [result['frameid'] for result in results if result['shear'] < 20 and result['correlation'] > 0.5 * maxCorr and result['motion'] < 50 ]
             self.templateFrame = self.goodFrames[frame_brightnesses[self.goodFrames].argmax()] #return the brightest of the remaining frames as a potential template
             self.filterResults = results
+            
         
     def fixed_align_frames(self):
         '''perform fixed alignment on the framestack'''
         if self.goodFrames is None or self.templateFrame is None:
             logging.warning('filterframes not run first')
+        
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return        
         
         framesToProcess = [i for i in self.goodFrames if i is not self.templateFrame]
         
@@ -262,7 +290,7 @@ class AoRecording:
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords']})
         #Check displacement is les than 50 pixels
-        results =[result for result in results if abs(result['shift'][1])<=50 and abs(result['shift'][0]) <= 50]        
+        #results =[result for result in results if abs(result['shift'][1])<=50 and abs(result['shift'][0]) <= 50]        
         
         #sort the results array
         def byFrame_key(result):
@@ -360,7 +388,9 @@ class AoRecording:
         self.fast_align()
 
     def complete_align_parallel(self):
-
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return        
         nFrames, nrows, ncols = self.alignedData.shape
         newCoords = self._get_coords(nrows, ncols)
 
@@ -590,6 +620,9 @@ class AoRecording:
         
     def create_average_frame(self,type='mean'):
         assert type in ['lucky','mean']
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return        
         if type == 'lucky':
             #creating a lucky average
             self.currentAverageFrame = StackTools.compute_lucky_image(self.currentStack)
@@ -597,4 +630,7 @@ class AoRecording:
             self.currentAverageFrame = self.currentStack.mean(axis=0)
             
     def create_stdev_frame(self):
+        #check to see if an error has occured before this
+        if not self.b_continue:
+            return        
         self.currentStdevFrame = ComputeStdevImage.compute_stdev_image(self.currentStack)
