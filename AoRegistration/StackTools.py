@@ -193,7 +193,10 @@ def apply_displacements(framestack,displacements):
     
     x_shifts = [val[0] for val in displacements]
     y_shifts = [val[1] for val in displacements]
-    
+    left=0
+    top=0
+    right=0
+    bottom=0
     if min(x_shifts) < 0:
         left = abs(min(x_shifts))
     if min(y_shifts) < 0:
