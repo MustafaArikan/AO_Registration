@@ -60,3 +60,14 @@ def test_quadrant_detect():
     target = (5.7136351459951777, 7.6843718079673131)
     result = stackTools.quadrant_detect(x)
     assert np.allclose(result, target),'myerror'
+    
+def test_framestack():
+    data = np.random.random((3,5,5))
+    vid = FrameStack.FrameStack(data,
+                                frameIds = [0,2,5],
+                                templateFrame = 2)
+    assert np.all(np.equal(vid.data,data))
+    assert np.all(np.equal(vid.templateFrame,data[1,:,:]))
+    assert np.all(np.equal(vid.get_frame_by_id(5),data[2,:,:]))
+    assert vid.get_idx_from_id(5) == 2
+    assert vid.get_id_from_idx(2) == 5
