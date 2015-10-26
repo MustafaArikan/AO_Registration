@@ -9,6 +9,7 @@ import StackTools
 import CompleteAlignParallel
 import FastAlignParallel
 import ComputeStdevImage
+import FrameStack
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,6 @@ class AoRecording:
     largeSzCol = 175
     numberPointsToAlign = 55
     
-    minCorrel = 0.38 # Used by make_valid_points .38 is OK for cones, other structures need lower values
     maxStdDist = 49 # max allowable variance (std) in distances moved
     maxDist = 20    # max allowable distance of deviation in pixels
     
@@ -85,7 +85,10 @@ class AoRecording:
             mask = np.zeros((self.frameheight,self.framewidth),dtype=np.bool)
             mask[y1:y2, x1:x2] = 1
             self.mask = mask
-            
+    def write_video(self,filename):
+        """Write the current framestack to an avi"""
+        self.data.write_stack(filename)
+        
     def load_video(self, cropInterlace = True):
         """Loads an AO video
         Loads the video identified by filepath into a nframes height x width numpy array
@@ -99,12 +102,12 @@ class AoRecording:
             logger.warning('Failed opening video: %s',self.filepath)
             return
 
-        self.nframes = cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)
-        self.frameheight = cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT)
-        self.framewidth = cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH)
+        nframes = cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)
+        frameheight = cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT)
+        framewidth = cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH)
         
         #preallocate a numpy array
-        data = np.empty([self.nframes, self.frameheight, self.framewidth],dtype=np.uint8)
+        data = np.empty([nframes, frameheight, framewidth],dtype=np.uint8)
       
         ret, frame = cap.read() #get the first frame
         if len(frame.shape)>2:
@@ -129,29 +132,8 @@ class AoRecording:
             right = min(c) + midRow
             data = data[:,:,left:right]
             
-        self.data=data
-        self.currentStack = data
-        
-
-    def write_video(self,fpath):
-        '''Write the current output to an avi'''
-        #check to see if an error has occured before this
-        if not self.b_continue:
-            return        
-        nframes, height,width = self.completeAlignedData.shape
-        #fourcc = cv2.cv.CV_FOURCC(*'XVID')
-        fourcc = cv2.cv.CV_FOURCC(*'I420')
-        vid = cv2.VideoWriter(fpath,fourcc,10,(width,height))
-        for idx in range(nframes):
-            frame = np.uint8(self.completeAlignedData[idx,:,:])
-            #frame = self.completeAlignedData[idx,:,:]
-            frame = np.tile(frame,(3,1,1))
-            frame = np.transpose(frame, (1,2,0))
-            
-            vid.write(frame)
-        
-        vid.release()              
-        
+        self.data = FrameStack.FrameStack(data)
+      
     def write_average_frame(self,filename):
         assert self.currentAverageFrame is not None,'Average frame not created'
         #check to see if an error has occured before this
@@ -161,8 +143,8 @@ class AoRecording:
         
     def write_frame(self,filename,frameTypes):
         #check to see if an error has occured before this
-        if not self.b_continue:
-            return      
+        if self.data is None:
+            return
         if isinstance(frameTypes,str):
             frameTypes = [frameTypes]
         for frameType in frameTypes:
@@ -173,10 +155,10 @@ class AoRecording:
                 assert self.currentStdevFrame is not None, 'Stdev frame not created'
                 ImageTools.write_image(filename,self.currentStdevFrame)
         
-    def filter_frames(self):
+    def filter_frames(self, minCorr=0.38):
         '''Perform an initial filtering on a frame set
-        [goodframes,template] = filterFrames(framestack)
-        returns the number of good frames, this can be used for error checking later
+        filterFrames()
+        minCorr default 0.38 is ok for cones, other structures require lower values
         '''
         #check to see if an error has occured before this
         if not self.b_continue:
@@ -196,12 +178,12 @@ class AoRecording:
         brightestFrames = np.array(frame_brightnesses > max_bright * 0.85, dtype=np.bool)
         
         framelist = np.where(good_brights)[0]
-        framestack = framestack[good_brights,:,:] # only going to use good frames from here on.
+        framestack.filter_frames_by_idx(good_brights) # only going to use good frames from here on.
     
         results = []
 
-        midRow = int(self.framewidth / 2)
-        midCol = int(self.frameheight / 2)        
+        midRow = int(framestack.frameWidth / 2)
+        midCol = int(framestack.frameHeight / 2)        
 
         for iFrame in np.arange(1,len(framelist)):
             currImage = framestack[iFrame - 1,:,:] #target frame
@@ -219,14 +201,14 @@ class AoRecording:
                                                        applyBlur=True,
                                                        attemptSubPixelAlignment=False)
             motion = (displacement['coords'][0]**2 + displacement['coords'][0]**2)**0.5
-            results.append({'frameid':iFrame,
+            results.append({'frameid':framestack.frameIds[iFrame],
                             'shear':shear['shearval'],
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords'],
                             'motion':motion})
         if len(results) < 1:
-            logger.debug("No good frames found")
-            self.b_continue = 0
+            logger.warning("No good frames found")
+            self.data = None
             return
         #data for frame 0 is missing, use the data from frame 1
         r=[r for r in results if r['frameid'] == 1]
@@ -238,43 +220,52 @@ class AoRecording:
             
         maxCorr = max([result['correlation'] for result in results])
         
-        if maxCorr < self.minCorrel:
+        if maxCorr < minCorr:
             #all correlations are crummy, just bail
             #TODO
-            logger.debug('No good frames found')
-            self.b_continue = 0
+            logger.warning('No good frames found')
+            self.data = None
         else:
-            self.goodFrames = [result['frameid'] for result in results if result['shear'] < 20 and result['correlation'] > 0.5 * maxCorr and result['motion'] < 50 ]
-            self.templateFrame = self.goodFrames[frame_brightnesses[self.goodFrames].argmax()] #return the brightest of the remaining frames as a potential template
-            self.filterResults = results
+            goodFrames = [result['frameid'] for result in results if result['shear'] < 20 and result['correlation'] > 0.5 * maxCorr and result['motion'] < 50 ]
+            badFrames = [frameid for frameid in self.data.frameIds if frameid not in goodFrames]
+            if not goodFrames:
+                logger.warning('No good frames found')
+                self.data = None                
+                return
+            logger.debug('Removing frames {} due to brightness or shear'.format(badFrames))
+            self.data.filter_frames_by_id(goodFrames)
+            self.data.templateFrameId = goodFrames[frame_brightnesses[goodFrames].argmax()] #return the brightest of the remaining frames as a potential template
+            self.filterResults = results    #store this for debugging
             
         
-    def fixed_align_frames(self):
-        '''perform fixed alignment on the framestack'''
-        if self.goodFrames is None or self.templateFrame is None:
-            logging.warning('filterframes not run first')
+    def fixed_align_frames(self,maxDisplacement=50):
+        '''perform fixed alignment on the framestack
+        maxDisplacement=50 - maximum allowed displacement, frames with > than this will be removed from the stack'''
+        if self.data is None:
+            logger.warning('No frames found')
+            return
+            
+        if self.data.templateFrame is None:
+            logger.warning('template frame not set')
+            return
         
-        #check to see if an error has occured before this
-        if not self.b_continue:
-            return        
+        framesToProcess = [i for i in self.data.frameIds if i != self.data.templateFrameId]
         
-        framesToProcess = [i for i in self.goodFrames if i is not self.templateFrame]
+        midRow = int(self.data.frameWidth / 2)
+        midCol = int(self.data.frameHeight / 2)        
         
-        midRow = int(self.framewidth / 2)
-        midCol = int(self.frameheight / 2)        
-        
-        targetFrame = self.data[self.templateFrame,:,:]
+        targetFrame = self.data.templateFrame
         targetFrame = targetFrame[midRow - self.largeFrameSize : midRow + self.largeFrameSize,
                                   midCol - self.largeFrameSize : midRow + self.largeFrameSize]
         
         results = []
         #ensure the target frame is included in the output
-        results.append({'frameid':self.templateFrame,
+        results.append({'frameid':self.data.templateFrameId,
                         'correlation':1,
                         'shift':(0,0)})
         
         for iFrame in framesToProcess:
-            templateFrame = self.data[iFrame,:,:]
+            templateFrame = self.data.get_frame_by_id(iFrame)
             templateFrame = templateFrame[midRow - self.smallFrameSize : midRow + self.smallFrameSize,
                                           midCol - self.smallFrameSize : midCol + self.smallFrameSize]
         
@@ -290,19 +281,24 @@ class AoRecording:
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords']})
         #Check displacement is les than 50 pixels
-        #results =[result for result in results if abs(result['shift'][1])<=50 and abs(result['shift'][0]) <= 50]        
+        good_results = [result for result in results 
+                        if abs(result['shift'][1])<=maxDisplacement 
+                        or abs(result['shift'][0]) <= maxDisplacement]
+        bad_results = [result['frameid'] for result in results 
+                        if abs(result['shift'][1]) > maxDisplacement 
+                        or abs(result['shift'][0]) > maxDisplacement]
+        logger.debug('Removing frames {} for too large displacements'.format(bad_results))
+        if not good_results:
+            #no good frames found
+            logger.warning('frame displacements are too large')
+            self.data = None
+            return
         
-        #sort the results array
-        def byFrame_key(result):
-            return result['frameid']
+        alignedData = StackTools.apply_displacements(self.data,good_results)
+        self.data = alignedData
         
-       
-        results = sorted(results,key = byFrame_key)
-        self.fixedDisplacements = [result['shift'] for result in results] #
-        self.goodFrames = [result['frameid'] for result in results] #
+        self.currentStack = alignedData
         
-        self.alignedData = StackTools.apply_displacements(self.data[self.goodFrames,:,:],self.fixedDisplacements)
-        self.currentStack = self.alignedData
         
     def complete_align(self):
         """Takes a roughly aligned stack and performs a complete alignment
@@ -472,7 +468,8 @@ class AoRecording:
         goodFrames = goodPoints.sum(axis=1) > 9
         goodFrames = np.logical_and(goodFrames,goodStdDists)
         output = []
-        for iFrame in np.where(goodFrames)[0]:
+        goodFrame_list = np.where(goodFrames)[0].tolist()
+        for iFrame in goodFrame_list:
             #work through the list of good frames
             displaceX = xShifts[iFrame,goodPoints[iFrame,:]]
             displaceY = yShifts[iFrame,goodPoints[iFrame,:]]
@@ -507,6 +504,7 @@ class AoRecording:
             output.append({'frameid':frameids[iFrame],
                            'ppx':displaceX,
                            'ppy':displaceY})
+        
         return output
 
 

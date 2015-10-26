@@ -7,7 +7,7 @@ import scipy.signal
 import cv2
 import logging
 import multiprocessing
-
+import FrameStack
 import ImageTools
 
 logger = logging.getLogger(__name__)
@@ -187,12 +187,24 @@ def _get_midpoint(norm_sum):
 def apply_displacements(framestack,displacements):
     """Apply displacements to an image stack
     Resizes the framestack to the largest displacement
+    displacements is expected to be a list of dicts
+    [{'frameid':id in original input},
+     {'shift':(x,y)}]
+     framestack should be a framestack object
     """
-
-    nframes, nrows, ncols = framestack.shape
+    assert isinstance(framestack,FrameStack.FrameStack), 'FrameStack object expected'
     
-    x_shifts = [val[0] for val in displacements]
-    y_shifts = [val[1] for val in displacements]
+    #check all displacements are in the framestack
+    displacement_ids = [displacement['frameid'] for displacement in displacements]
+    
+    nrows, ncols = framestack.frameHeight, framestack.frameWidth
+    nframes = len(displacements)
+    if not all(np.in1d(displacement_ids, framestack.frameIds)):
+        raise ValueError('Invalid displacements supplied')
+    
+    #calculate the minimum and maximum displacements
+    x_shifts = [displacement['shift'][0] for displacement in displacements]
+    y_shifts = [displacement['shift'][1] for displacement in displacements]
     left=0
     top=0
     right=0
@@ -210,25 +222,31 @@ def apply_displacements(framestack,displacements):
                       nrows + top + bottom+1,
                       ncols + left + right+1),
                       dtype = np.float) * -1
-    
-    for idx in range(framestack.shape[0]):
-        if displacements[idx][0] < 0:
-            leftIndex = left - abs(displacements[idx][0])
+    outputIdx = -1
+    for displacement in displacements:
+        outputIdx = outputIdx + 1
+        currentFrameId = displacement['frameid']
+        xShift = displacement['shift'][0]
+        yShift = displacement['shift'][1]
+        if xShift < 0:
+            leftIndex = left - abs(xShift)
         else:
-            leftIndex = left + displacements[idx][0]
+            leftIndex = left + xShift
             
-        if displacements[idx][1] < 0:
-            topIndex = top - abs(displacements[idx][1])
+        if yShift < 0:
+            topIndex = top - abs(yShift)
         else:
-            topIndex = top + displacements[idx][1]
+            topIndex = top + yShift
         
-        output[idx,topIndex:topIndex + nrows, leftIndex : leftIndex + ncols] = framestack[idx,:,:]
-        
+        output[outputIdx,
+               topIndex:topIndex + nrows,
+               leftIndex : leftIndex + ncols] = framestack.get_frame_by_id(currentFrameId)       
         #find the points where all images overlap
     map = output.min(0)
     [r,c] = np.where(map>-1)
     output = output[:,min(r):max(r)+1,min(c):max(c)+1]  #crop the output to just the overlapping region
-        
+    output = FrameStack.FrameStack(output,frameIds=displacement_ids)
+    output.templateFrameId = framestack.templateFrameId
     return output
 
 def compute_lucky_image(stack):
