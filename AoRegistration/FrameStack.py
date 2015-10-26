@@ -53,7 +53,20 @@ class FrameStack(object):
         else:
             raise StopIteration
         
-    
+    def get_idx_from_id(self,id):
+        """return the index position for frame id
+        this could be done directly by querying the frameids list
+        """
+        if not np.in1d(id,self.frameIds):
+            raise ValueError("Frame id:{} not found".format(id))
+        return self.frameIds.tolist().index(id)
+        
+    def get_id_from_idx(self,idx):
+        """return the index position for frame id
+        this could be done directly by querying the frameids list
+        """
+        return self.frameIds[idx]
+        
     def delete_frame_by_index(self,idx):
         """Remove a frame by it's index in the frame stack"""
         self.data = np.delete(self.data, idx, 0)
