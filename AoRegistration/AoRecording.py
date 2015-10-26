@@ -631,13 +631,13 @@ class AoRecording:
     def create_average_frame(self,type='mean'):
         assert type in ['lucky','mean']
         #check to see if an error has occured before this
-        if not self.b_continue:
-            return        
+        if self.data is None:
+            logger.debug('')
         if type == 'lucky':
             #creating a lucky average
-            self.currentAverageFrame = StackTools.compute_lucky_image(self.currentStack)
+            self.currentAverageFrame = StackTools.compute_lucky_image(self.data)
         else:
-            self.currentAverageFrame = self.currentStack.mean(axis=0)
+            self.currentAverageFrame = self.data.mean(axis=0)
             
     def create_stdev_frame(self):
         #check to see if an error has occured before this
