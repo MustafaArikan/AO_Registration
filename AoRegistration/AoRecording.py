@@ -300,20 +300,17 @@ class AoRecording:
         self.currentStack = alignedData
         
         
-    def complete_align(self):
+    def complete_align(self,minCorr = 0.38):
         """Takes a roughly aligned stack and performs a complete alignment
+        minCorr (default 0.38, minimum correlation for inclusion in the output stack)
         """        
-        if self.goodFrames is None or self.templateFrame is None:
-            logging.warning('filterframes not run first')        
-            
-        if self.alignedData is None:
-            logging.warning('fixed align not not run first')        
-            
-        nframes, nrows, ncols = self.alignedData.shape
+        if self.data is None:
+            logger.warning('Aborting:No good frames found')
+            return
+        nrows,ncols = self.data.frameHeight, self.data.frameWidth
         
-        targetFrame_idx = self.goodFrames.index(self.templateFrame) #wish I had not called it template frame!!!
-        targetFrameData = self.alignedData[targetFrame_idx]
-        framesToProcess = [frameidx for frameidx in self.goodFrames if not frameidx == self.templateFrame]
+        targetFrameData = self.data.templateFrame
+        framesToProcess = [frameid for frameid in self.data.frameIds if not frameid == self.data.templateFrameId]
         #apply a mask to the target frame
         mask = np.zeros(targetFrameData.shape,dtype=np.bool)
         mask[targetFrameData > 0] = 1
@@ -340,19 +337,20 @@ class AoRecording:
         largeColStart = (ncols / 2) - (self.largeSzCol / 2)
         
         results = []
-        for idxFrame in range(len(framesToProcess)):
+        for frameId in framesToProcess:
             #loop through all the frames here
             #need to generate a new mask for each frame
-            image = self.alignedData[idxFrame,:,:]
+            image = self.data.get_frame_by_id(frameId)
             mask = np.zeros(image.shape,dtype=np.bool)
             mask[image > 0] = 1
             image = np.ma.array(image,
                                 mask=~mask)
             randomData = image.std() * np.random.standard_normal(image.shape) + image.mean()
             image = (image.data * ~image.mask) + (randomData * image.mask) #no longer a masked array
-            results.append({'frameid':framesToProcess[idxFrame],'stripResults':[]})
+            results.append({'frameid':frameId,'stripResults':[]})
             for idxStrip in range(len(smallRowStart)):
                 #loop through the strips here
+                stripResults = [result['stripResults'] for result in results if result['frameid'] == frameId][0]
                 smallStrip = image[smallRowStart[idxStrip]:smallRowStart[idxStrip]+self.smallSzRow,
                                    smallColStart:smallColStart + self.smallSzCol]
             
@@ -370,7 +368,7 @@ class AoRecording:
                 #coords = displacement['coords']
                 #displacement['coords'] = (coords[0] + largeRowStart[idxStrip],
                                           #coords[1] + largeColStart)
-                results[idxFrame]['stripResults'].append(displacement)
+                stripResults.append(displacement)
                 
         newCoords = self._get_coords(nrows, ncols)
         timetics=[]
@@ -380,8 +378,8 @@ class AoRecording:
             
         self.timeTics = np.array(timetics)
         self.times = newCoords['times']
-        self.alignmentSplines = self._make_valid_points(results)
-        self.fast_align()
+        alignmentSplines = self._make_valid_points(results,minCorr)
+        self.data = self.fast_align(alignmentSplines)
 
     def complete_align_parallel(self):
         #check to see if an error has occured before this
@@ -424,7 +422,7 @@ class AoRecording:
         self.fast_align_parallel()
 
 
-    def _make_valid_points(self,displacements):
+    def _make_valid_points(self,displacements,minCorr):
         """Takes the displacements created by complete_align() and converts them into a series of fitted splines
         returns a list of dicts, one dict for each frame
         {'frameid':original frame number
@@ -439,24 +437,25 @@ class AoRecording:
             raise ValueError            
         
         #convert the complete alignment results to arrays
-        correls = np.empty((len(self.goodFrames)-1,self.numberPointsToAlign))    #frames by strips N.B. template frame is excluded
-        xShifts = np.empty((len(self.goodFrames)-1,self.numberPointsToAlign))
-        yShifts = np.empty((len(self.goodFrames)-1,self.numberPointsToAlign))
+        correls = np.empty((len(displacements),self.numberPointsToAlign),dtype=np.float32)    #frames by strips N.B. template frame is excluded
+        xShifts = np.empty((len(displacements),self.numberPointsToAlign),dtype=np.float32)
+        yShifts = np.empty((len(displacements),self.numberPointsToAlign),dtype=np.float32)
         frameids = [frame['frameid'] for frame in displacements]
-        for iFrame in range(len(displacements)):
-            result=displacements[iFrame]
-            stripResults = result['stripResults']
-            for iSlice in range(len(stripResults)):
-                correls[iFrame,iSlice] = stripResults[iSlice]['maxcorr']
-                xShifts[iFrame,iSlice] = stripResults[iSlice]['coords'][0]
-                yShifts[iFrame,iSlice] = stripResults[iSlice]['coords'][1]
-        
+        frameIdx = -1
+        for frameDisplacement in displacements:
+            frameIdx = frameIdx + 1
+            stripResults = frameDisplacement['stripResults']
+            correls[frameIdx,:] = [stripResult['maxcorr'] for stripResult in stripResults]
+            xShifts[frameIdx,:] = [stripResult['coords'][0] for stripResult in stripResults]
+            yShifts[frameIdx,:] = [stripResult['coords'][1] for stripResult in stripResults]
+            
+            
         #this trims the first and last strips
         #ugly code...
         correls[:,0:2]=0
         correls[:,(correls.shape[1]-2):(correls.shape[1])]=0
         
-        goodCorrels = correls > self.minCorrel
+        goodCorrels = correls > minCorr
 
         dists = np.sqrt(xShifts**2 + yShifts**2)
         stdDist = np.std(dists,axis=1)   #deviation of displacements per frame
@@ -469,6 +468,12 @@ class AoRecording:
         goodFrames = np.logical_and(goodFrames,goodStdDists)
         output = []
         goodFrame_list = np.where(goodFrames)[0].tolist()
+        badFrames = np.array(frameids)[~goodFrames].tolist()
+        if len(badFrames)>0:
+            logger.info('Excluding frames {} for bad strip alignments'.format(badFrames))
+        else:
+            logger.info('All frames have good strip alignments')
+            
         for iFrame in goodFrame_list:
             #work through the list of good frames
             displaceX = xShifts[iFrame,goodPoints[iFrame,:]]
@@ -555,38 +560,41 @@ class AoRecording:
         self.completeAlignedData = FastAlignParallel.outstack
         self.currentStack = self.completeAlignedData
         
-    def fast_align(self):
+    def fast_align(self,alignmentSplines):
         outputmargin = 30
         
-        nrows = self.alignedData.shape[1]
-        ncols = self.alignedData.shape[2]
-        nframes = len(self.alignmentSplines)
+        nrows = self.data.frameHeight
+        ncols = self.data.frameWidth
         
-        templateFrameIdx = self.goodFrames.index(self.templateFrame)        
+        nframes = len(alignmentSplines)
+        
+        templateFrameIdx = self.data.get_idx_from_id(self.data.templateFrameId)
         
         outputSizeRows = nrows + 2*outputmargin
         outputSizeCols = ncols + 2*outputmargin
         
         outstack = np.ones((nframes + 1, outputSizeRows, outputSizeCols))
         outstack = outstack * -1
-        #insert the template frame unchanged
+        #insert the template frame unchanged in first position
         outstack[templateFrameIdx,
                  outputmargin:outputmargin+nrows,
-                 outputmargin:outputmargin+ncols] = self.alignedData[templateFrameIdx,:,:]
+                 outputmargin:outputmargin+ncols] = self.data.templateFrame
         
         interiorMask = outstack[templateFrameIdx,:,:] > -0.001 #there has to be a better way to do this.
         
-        mask = self.alignedData[templateFrameIdx,:,:] > 0   #this mask is the size of the rough aligned images,true over the region of the template image, we will use it to ensure we only sample valid points
+        mask = self.data.templateFrame > 0   #this mask is the size of the rough aligned images,true over the region of the template image, we will use it to ensure we only sample valid points
         
-        newCoords = self._get_coords(self.alignedData.shape[1],
-                                     self.alignedData.shape[2])
+        newCoords = self._get_coords(self.data.frameHeight,
+                                     self.data.frameWidth)
         times = newCoords['times']
         times = times.ravel()
         
-        for frame in self.alignmentSplines:
-            frameIdx = self.goodFrames.index(frame['frameid'])
-            logging.debug('Aligning frame{}'.format(frameIdx))
-            srcImg = self.alignedData[frameIdx,:,:] * mask
+        for frame in alignmentSplines:
+            frameIdx = self.data.get_idx_from_id(frame['frameid'])
+
+            logging.debug('Aligning frame{}'.format(frame['frameid']))
+            
+            srcImg = self.data.get_frame_by_id(frame['frameid']) * mask
             srcImg = srcImg + ((srcImg==0) * -1)
             
             tmpFrame = np.ones(interiorMask.shape) * -1
@@ -611,10 +619,11 @@ class AoRecording:
                          finalCols[validRows[idx],validCols[idx]]] = srcImg[validRows[idx],
                                                                             validCols[idx]]
                 
-            outstack[frameIdx] = tmpFrame
+            outstack[frameIdx,:,:] = tmpFrame
             
-        self.completeAlignedData = outstack
-        self.currentStack = self.completeAlignedData
+        return FrameStack.FrameStack(outstack,
+                                     frameIds = self.data.frameIds,
+                                     templateFrame = self.data.templateFrameId)
         
     def create_average_frame(self,type='mean'):
         assert type in ['lucky','mean']
