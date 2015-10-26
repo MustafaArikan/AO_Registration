@@ -15,7 +15,7 @@ class FrameStack(object):
             raise ValueError('Expected an nFrames x Height x Width array')
         
         if len(args) == 1:
-            self.frameIdx = np.array(args[0])
+            self.frameIds = np.array(args[0])
         elif 'frameIds' in kargs.keys():
             self.frameIds = np.array(kargs['frameIds'])
         else:
