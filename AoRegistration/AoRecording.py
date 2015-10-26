@@ -60,7 +60,7 @@ class AoRecording:
                                mask = np.ones((self.data.shape),dtype=np.bool))
         else:
             masked_data = np.ma.array(self.data,
-                                      mask = np.tile(~self.mask,[self.nframes,1,1]))
+                                      mask = np.tile(~self.mask,[self.data.frameCount,1,1]))
                                       
         return masked_data
                 
@@ -78,11 +78,11 @@ class AoRecording:
             x2,y2 = roi[1]
 
             assert x1 >= 0 
-            assert x2 >= x1 and x2 <= self.framewidth
+            assert x2 >= x1 and x2 <= self.data.frameWidth
             assert y1 >= 0
-            assert y2 >= y1 and y2 <= self.frameheight
+            assert y2 >= y1 and y2 <= self.data.frameHeight
             
-            mask = np.zeros((self.frameheight,self.framewidth),dtype=np.bool)
+            mask = np.zeros((self.data.frameHeight,self.data.frameWidth),dtype=np.bool)
             mask[y1:y2, x1:x2] = 1
             self.mask = mask
     def write_video(self,filename):
