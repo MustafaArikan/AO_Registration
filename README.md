@@ -2,7 +2,8 @@
 Code for registering video output from high-resolution retinal imaging systems
 
 ## Notes
-Added parallel processing, reduced times for a 32 frame video (30 good frames) from 80 seconds to ~45 seconds.
+* Added parallel processing, reduced times for a 32 frame video (30 good frames) from 80 seconds to ~45 seconds.
+* 26.10.2015 added a new FrameStack object to hold video frames, extends ndarray  object to keep track of frame ids
 
 ## Funding
 
@@ -51,5 +52,5 @@ $ nosetests
 
 ```
 
-## Notes
+## Observations
 scipy.signal.correlate2d is slow as molases.
