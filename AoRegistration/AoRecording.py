@@ -232,7 +232,7 @@ class AoRecording:
                 logger.warning('No good frames found')
                 self.data = None                
                 return
-            logger.debug('Removing frames {} due to brightness or shear'.format(badFrames))
+            logger.info('Removing frames {} due to brightness or shear'.format(badFrames))
             self.data.filter_frames_by_id(goodFrames)
             self.data.templateFrameId = goodFrames[frame_brightnesses[goodFrames].argmax()] #return the brightest of the remaining frames as a potential template
             self.filterResults = results    #store this for debugging
@@ -287,7 +287,7 @@ class AoRecording:
         bad_results = [result['frameid'] for result in results 
                         if abs(result['shift'][1]) > maxDisplacement 
                         or abs(result['shift'][0]) > maxDisplacement]
-        logger.debug('Removing frames {} for too large displacements'.format(bad_results))
+        logger.info('Removing frames {} for too large displacements'.format(bad_results))
         if not good_results:
             #no good frames found
             logger.warning('frame displacements are too large')
@@ -381,11 +381,16 @@ class AoRecording:
         alignmentSplines = self._make_valid_points(results,minCorr)
         self.data = self.fast_align(alignmentSplines)
 
-    def complete_align_parallel(self):
+    def complete_align_parallel(self,minCorr = 0.38):
+        """Takes a roughly aligned stack and performs a complete alignment
+            minCorr (default 0.38, minimum correlation for inclusion in the output stack)
+            """                
         #check to see if an error has occured before this
-        if not self.b_continue:
-            return        
-        nFrames, nrows, ncols = self.alignedData.shape
+        if self.data is None:
+            logger.warning('Aborting:No good frames found')
+            return
+        nrows,ncols = self.data.frameHeight, self.data.frameWidth
+
         newCoords = self._get_coords(nrows, ncols)
 
         #setup the row indices
@@ -402,8 +407,7 @@ class AoRecording:
         smallColStart = (ncols / 2) - (self.smallSzCol / 2)
         largeColStart = (ncols / 2) - (self.largeSzCol / 2)
         logging.debug('Starting parallel alignment')
-        CompleteAlignParallel.complete_align_parallel(self.alignedData, self.goodFrames, 
-                                                     self.templateFrame,
+        CompleteAlignParallel.complete_align_parallel(self.data,
                                                      (smallRowStart,largeRowStart),
                                                      (smallColStart,largeColStart),
                                                      (self.smallSzRow,self.largeSzRow), 
@@ -418,8 +422,8 @@ class AoRecording:
     
         self.timeTics = np.array(timetics)
         self.times = newCoords['times']
-        self.alignmentSplines = self._make_valid_points(CompleteAlignParallel.results)
-        self.fast_align_parallel()
+        alignmentSplines = self._make_valid_points(CompleteAlignParallel.results,minCorr)
+        self.data = self.fast_align_parallel(alignmentSplines)
 
 
     def _make_valid_points(self,displacements,minCorr):
@@ -470,7 +474,8 @@ class AoRecording:
         goodFrame_list = np.where(goodFrames)[0].tolist()
         badFrames = np.array(frameids)[~goodFrames].tolist()
         if len(badFrames)>0:
-            logger.info('Excluding frames {} for bad strip alignments'.format(badFrames))
+            logger.info('Removing frames {} for bad strip alignments'.format(badFrames))
+            self.data.delete_frame_by_id(badFrames)
         else:
             logger.info('All frames have good strip alignments')
             
@@ -549,16 +554,14 @@ class AoRecording:
         times = times.T
         return {'rowlocs':rowlocs,'collocs':collocs,'times':times,'FrameTimeIncrement':frameTime}
         
-    def fast_align_parallel(self):
-        newCoords = self._get_coords(self.alignedData.shape[1],
-                                     self.alignedData.shape[2]) 
-        FastAlignParallel.fast_align_parallel(self.alignedData,
-                                              self.alignmentSplines,
-                                              self.goodFrames,
-                                              self.templateFrame,
+    def fast_align_parallel(self,alignmentSplines):
+        newCoords = self._get_coords(self.data.frameHeight,
+                                     self.data.frameWidth) 
+        alignedData = FastAlignParallel.fast_align_parallel(self.data,
+                                              alignmentSplines,
                                               newCoords)
-        self.completeAlignedData = FastAlignParallel.outstack
-        self.currentStack = self.completeAlignedData
+        return alignedData
+        
         
     def fast_align(self,alignmentSplines):
         outputmargin = 30

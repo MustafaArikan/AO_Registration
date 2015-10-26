@@ -2,6 +2,7 @@ import multiprocessing as mp
 import numpy as np
 import logging
 import StackTools
+import FrameStack
 
 logger = logging.getLogger(__name__)
 
@@ -74,12 +75,10 @@ def _complete_align_frame(image,frameid):
     return result
 
 
-def complete_align_parallel(alignedData,goodFrames,targetFrameIdx,rowStarts,colStarts,rowSizes,colSizes):
+def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     """Takes a roughly aligned stack and performs a complete alignment
     Params:
-    alignedData - nFrame x Height x Width ndarray
-    goodFrames - list of good frames, values are the frame index from the original input movie
-    targetFrameIdx - Index of the chosen target frame from the original input movie
+    alignedData - FrameStack.FrameStack object
     rowStarts - ([smallRowStarts], largeRowStart)
     colStarts - ([smallColStarts], largeColStart)
     rowSizes - (smallRowSize,largeRowSize)
@@ -87,10 +86,11 @@ def complete_align_parallel(alignedData,goodFrames,targetFrameIdx,rowStarts,colS
     numberPointsToAlign - number of strips in each frame
     newCoords - height x width ndarray
     """        
-    nFrames, nrows, ncols = alignedData.shape
+    nFrames = alignedData.frameCount
+    nrows = alignedData.frameHeight
+    ncols = alignedData.frameWidth
     assert nFrames > 1, 'Requires more than one frame'
-    assert len(goodFrames) == nFrames, 'goodFrames must be list the same length as frames in the alignedData stack'
-
+    
     global results
     global timetics
     global sharedTargetFrameData
@@ -103,10 +103,10 @@ def complete_align_parallel(alignedData,goodFrames,targetFrameIdx,rowStarts,colS
     global sharedSmallSzCol
     global sharedLargeSzCol
     #convert from original stack index to new stack index
-    localTargetFrameIdx = goodFrames.index(targetFrameIdx)
-    targetFrameData = alignedData[localTargetFrameIdx]
-    
-    framesToProcess = [frameidx for frameidx in goodFrames if not frameidx == targetFrameIdx]
+    #localTargetFrameIdx = goodFrames.index(targetFrameIdx)
+    targetFrameData = alignedData.templateFrame
+
+    framesToProcess = [frameId for frameId in alignedData.frameIds if not frameId == alignedData.templateFrameId]
     #apply a mask to the target frame
     mask = np.zeros(targetFrameData.shape,dtype=np.bool)
     mask[targetFrameData > 0] = 1
@@ -131,9 +131,9 @@ def complete_align_parallel(alignedData,goodFrames,targetFrameIdx,rowStarts,colS
     
     results = []
     pool = mp.Pool()
-    for idxFrame in range(len(framesToProcess)):
+    for frameId in framesToProcess:
         pool.apply_async(_complete_align_frame,
-                         args = (alignedData[idxFrame,:,:],framesToProcess[idxFrame]),
+                         args = (alignedData.get_frame_by_id(frameId),frameId),
                          callback=_complete_align_parallel_callback)
     pool.close()
     pool.join()    

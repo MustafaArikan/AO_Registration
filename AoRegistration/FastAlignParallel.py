@@ -1,29 +1,32 @@
 import multiprocessing as mp
 import numpy as np
 import logging
+import FrameStack
 
 logger = logging.getLogger(__name__)
 
 outstack = None
 
-def fast_align_parallel(imageStack,alignmentSplines,goodFrames,targetFrameNo,newCoords):
+def fast_align_parallel(imageStack,alignmentSplines,newCoords):
     """apply image alignment splines to an input image stack
     Params:
-    imageStack nFrames x height x width ndarray
+    imageStack FrameStack.FrameStack object
     alignmentSplines - list of splines, each item is a dict with entries 'frameid' - frame number in original input. 'ppx','ppy'- splines for x & y coordinates
-    goodFrames - List of positions of the original frames in the imageStack
-    targetFrameNo - Original frame number of the template frame in the original input
     newCoords - height x width ndarray containing pixel sample times
     """   
     global outstack
     
     outputmargin = 30
-    assert len(alignmentSplines) == (imageStack.shape[0]-1), 'alignmentSplines should be list of length imageStack.shape[0]-1'
-    nframes, nrows, ncols = imageStack.shape
-
+    assert len(alignmentSplines) == (imageStack.frameCount-1), 'alignmentSplines should be list of length imageStack.shape[0]-1'
+    
+    
+    nrows = imageStack.frameHeight
+    ncols = imageStack.frameWidth
+    
     nframes = len(alignmentSplines)
        
-    templateFrameIdx = goodFrames.index(targetFrameNo)        
+
+    templateFrameIdx = imageStack.get_idx_from_id(imageStack.templateFrameId)
     
     outputSizeRows = nrows + 2*outputmargin
     outputSizeCols = ncols + 2*outputmargin
@@ -42,14 +45,15 @@ def fast_align_parallel(imageStack,alignmentSplines,goodFrames,targetFrameNo,new
     
     pool=mp.Pool()
 
-    for idx in range(nframes):
-        frameid = alignmentSplines[idx]['frameid']
-        frameIdx = goodFrames.index(frameid)
+    for alignmentSpline in alignmentSplines:
+        frameId = alignmentSpline['frameid']
+        frameIdx = imageStack.get_idx_from_id(frameId)
         
-        srcImg = imageStack[frameIdx,:,:]
+        srcImg = imageStack.get_frame_by_id(frameId)
         
         pool.apply_async(_align_frame,args=(srcImg,
-                                            alignmentSplines[idx],
+                                            alignmentSpline,
+                                            frameId,
                                             frameIdx,
                                             mask,
                                             interiorMask,
@@ -60,11 +64,15 @@ def fast_align_parallel(imageStack,alignmentSplines,goodFrames,targetFrameNo,new
 
     pool.close()
     pool.join()        
+    
+    return FrameStack.FrameStack(outstack,
+                                 frameIds = imageStack.frameIds,
+                                 templateFrame = imageStack.templateFrameId)
 
-def _align_frame(srcImg,splines,frameIdx,mask,interiorMask,newCoords,outputmargin):
+def _align_frame(srcImg,splines,frameId,frameIdx,mask,interiorMask,newCoords,outputmargin):
     """function to align a frame using splines
     frameIdx here is the index of the frame in the aligned imageStack"""
-    logger.debug('aligning frame:{}'.format(frameIdx))
+    logger.debug('aligning frame:{}'.format(frameId))
     nrows, ncols = srcImg.shape
     outputSizeRows, outputSizeCols = interiorMask.shape
     
