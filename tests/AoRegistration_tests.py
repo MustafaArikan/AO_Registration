@@ -1,10 +1,11 @@
 from nose.tools import *
 import AoRegistration.AoRecording as AoRecording
 import AoRegistration.StackTools as stackTools
+import AoRegistration.FrameStack as FrameStack
 import numpy as np
 
 vid = AoRecording.AoRecording(filepath='data/sample.avi')
-vid.load_video()
+vid.load_video(cropInterlace=False)
 
 def setup():
     print "SETUP!"
@@ -20,9 +21,9 @@ def test_basic():
 def test_load_video():
     vid = AoRecording.AoRecording(filepath='data/sample.avi')
     vid.load_video(cropInterlace=False)
-    assert_equal(vid.nframes,32)
-    assert_equal(vid.frameheight,1024)
-    assert_equal(vid.framewidth,1000)
+    assert_equal(vid.data.frameCount,32)
+    assert_equal(vid.data.frameHeight,1024)
+    assert_equal(vid.data.frameWidth,1000)
     assert_equal(vid.data.shape,(32,1024,1000))
     
 @with_setup(setup)        
