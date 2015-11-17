@@ -128,7 +128,7 @@ def click_and_crop(image, types='roi'):
 
                 return output
 
-def write_image(filename,image,normalise=False):
+def write_image(filename,image,normalise=True):
     assert len(image.shape) < 3, 'Only support for grayscale images is enabled'
     if normalise:
         if not image.dtype == np.float:
