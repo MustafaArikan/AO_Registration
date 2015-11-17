@@ -261,11 +261,11 @@ def compute_lucky_image(stack):
     nFrames, height, width = stack.shape
     
     numFinal = 15 
-    covStack = np.empty_like(stack.shape) #stack to hold covariance matrices
-    imageStackSorted = np.empty((numFinal),height,width)
+    covStack = np.empty_like(stack) #stack to hold covariance matrices
+    imageStackSorted = np.empty((numFinal,height,width))
     
     for iFrame in range(nFrames):
-        covStack[iFrame,:,:] = ImageTools.comatrix(covStack[iFrame,:,:])
+        covStack[iFrame,:,:] = ImageTools.comatrix(stack[iFrame,:,:])
         
     covStackSortIndex = covStack.argsort(0)
     covStackSortIndex[:] = covStackSortIndex[::-1] #reverse the sort

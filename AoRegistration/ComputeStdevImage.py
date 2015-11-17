@@ -39,7 +39,9 @@ def _compute_stdev_image_callback(result):
 def compute_stdev_image(stack):
     '''Compute the standard deviation image'''
     nFrames, height, width = stack.shape
-    assert nFrames > 10, 'stdev image requires at least 10 frames'
+    if nFrames < 10:
+        logger.error('stdev image requires at least 10 frames')
+        return None
     
     global results
     results = np.empty(stack.shape)
@@ -65,7 +67,7 @@ def compute_stdev_image(stack):
     imageNorm = imageAvg / imageAvg.max()
     
     imageRatio = imageStdev / imageNorm
-    imageRatio[imageRatio > 0.3] = 0.3
+    #imageRatio[imageRatio > 0.3] = 0.3
     imageRatio = cv2.medianBlur(imageRatio.astype(np.float32),3)
     
     return imageRatio

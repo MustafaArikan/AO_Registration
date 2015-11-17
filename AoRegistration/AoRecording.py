@@ -135,7 +135,9 @@ class AoRecording:
         self.data = FrameStack.FrameStack(data)
       
     def write_average_frame(self,filename):
-        assert self.currentAverageFrame is not None,'Average frame not created'
+        if self.currentAverageFrame is None:
+            logger.error('Average frame not created')
+            raise ValueError
         #check to see if an error has occured before this
         if not self.b_continue:
             return        
@@ -152,8 +154,8 @@ class AoRecording:
             if frameType == 'average':
                 self.write_average_frame(filename)
             if frameType == 'stdev':
-                assert self.currentStdevFrame is not None, 'Stdev frame not created'
-                ImageTools.write_image(filename,self.currentStdevFrame)
+                if self.currentStdevFrame is not None:
+                    ImageTools.write_image(filename,self.currentStdevFrame)
         
     def filter_frames(self, minCorr=0.38):
         '''Perform an initial filtering on a frame set
@@ -179,6 +181,11 @@ class AoRecording:
         
         framelist = np.where(good_brights)[0]
         framestack.filter_frames_by_idx(good_brights) # only going to use good frames from here on.
+
+        if len(good_brights) < 1:
+            logger.error("No good frames found")
+            self.data = None
+            raise RuntimeError("No good frames found:Brightness too low")
     
         results = []
 
@@ -207,13 +214,14 @@ class AoRecording:
                             'shift':displacement['coords'],
                             'motion':motion})
         if len(results) < 1:
-            logger.warning("No good frames found")
+            logger.error("No good frames found")
             self.data = None
-            return
-        #data for frame 0 is missing, use the data from frame 1
-        r=[r for r in results if r['frameid'] == 1]
-        r=dict(r[0])    #make a copy of this item
-        r['frameid']=0
+            raise RuntimeError("No good frames found:Shear too high")
+
+        #data for frame 0 is missing, use the data from the first remaining frame
+        #r=[r for r in results if r['frameid'] == 1]
+        r =dict(results[0])    #make a copy of this item
+        r['frameid']=framelist[0]
         r['shift']=(0,0)
         r['motion']=0
         results.append(r)
@@ -224,14 +232,14 @@ class AoRecording:
             #all correlations are crummy, just bail
             #TODO
             logger.warning('No good frames found')
-            self.data = None
+            raise RuntimeError("No good frames found:Correlation too low")
         else:
             goodFrames = [result['frameid'] for result in results if result['shear'] < 20 and result['correlation'] > 0.5 * maxCorr and result['motion'] < 50 ]
             badFrames = [frameid for frameid in self.data.frameIds if frameid not in goodFrames]
             if not goodFrames:
                 logger.warning('No good frames found')
-                self.data = None                
-                return
+                raise RuntimeError('No good frames found:Group criteria (Shear, Correlation, Motion) not met.')
+                
             logger.info('Removing frames {} due to brightness or shear'.format(badFrames))
             self.data.filter_frames_by_id(goodFrames)
             self.data.templateFrameId = goodFrames[frame_brightnesses[goodFrames].argmax()] #return the brightest of the remaining frames as a potential template
@@ -291,8 +299,7 @@ class AoRecording:
         if not good_results:
             #no good frames found
             logger.warning('frame displacements are too large')
-            self.data = None
-            return
+            raise RuntimeError('frame displacements are too large')
         
         alignedData = StackTools.apply_displacements(self.data,good_results)
         self.data = alignedData
@@ -635,7 +642,12 @@ class AoRecording:
             logger.debug('')
         if type == 'lucky':
             #creating a lucky average
-            self.currentAverageFrame = StackTools.compute_lucky_image(self.data)
+            if self.data.frameCount > 20:
+                self.currentAverageFrame = StackTools.compute_lucky_image(self.data)
+            else:
+                self.currentAverageFrame = None
+                logger.warning('Too few frames to create lucky average')
+                
         else:
             self.currentAverageFrame = self.data.mean(axis=0)
             
