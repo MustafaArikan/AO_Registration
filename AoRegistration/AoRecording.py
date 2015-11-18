@@ -127,9 +127,12 @@ class AoRecording:
             frameSums = data.sum(0)
             midRow = frameSums.shape[1]/2
             r,c = np.where(frameSums[:,0:midRow]==0)
-            left = max(c)
+            left = max(c) + 1
             r,c = np.where(frameSums[:,midRow:]==0)
-            right = min(c) + midRow
+            right = (min(c) - 1) + midRow
+            #limit the interlace to a maximum of 200 pixels, otherwise can cause problems with v dark videos
+            left = min([left,200])
+            right = max([right,framewidth-200])
             data = data[:,:,left:right]
             
         self.data = FrameStack.FrameStack(data)
@@ -213,10 +216,12 @@ class AoRecording:
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords'],
                             'motion':motion})
-        if len(results) < 1:
-            logger.error("No good frames found")
-            self.data = None
-            raise RuntimeError("No good frames found:Shear too high")
+        #filter frames where sheer > 20
+        #results = [r for r in results if r['motion'] <= 20]
+        #if len(results) < 1:
+            #logger.error("No good frames found")
+            #self.data = None
+            #raise RuntimeError("No good frames found:Shear too high")
 
         #data for frame 0 is missing, use the data from the first remaining frame
         #r=[r for r in results if r['frameid'] == 1]
