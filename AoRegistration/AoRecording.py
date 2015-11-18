@@ -225,6 +225,8 @@ class AoRecording:
 
         #data for frame 0 is missing, use the data from the first remaining frame
         #r=[r for r in results if r['frameid'] == 1]
+        if not results:
+            raise RuntimeError('Could not get displacements')
         r =dict(results[0])    #make a copy of this item
         r['frameid']=framelist[0]
         r['shift']=(0,0)
