@@ -89,7 +89,9 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     nFrames = alignedData.frameCount
     nrows = alignedData.frameHeight
     ncols = alignedData.frameWidth
-    assert nFrames > 1, 'Requires more than one frame'
+    if nFrames <= 1:
+        raise RuntimeError('Requires more than one frame')
+    
     
     global results
     global timetics
