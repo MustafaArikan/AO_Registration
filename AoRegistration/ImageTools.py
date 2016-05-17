@@ -160,6 +160,8 @@ def comatrix(image):
     """Calculate the 2D covariace matrix for an image
     """
     height, width = image.shape
+    image = np.ma.MaskedArray(data = image,
+                                     mask = (image==0))
     imageWorking = image
     nullKernel = np.zeros((7,7))
     smallAverageKernel = np.ones((7,7))
@@ -216,12 +218,13 @@ def comatrix(image):
     contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k6,'same')**2
     contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k7,'same')**2
     contrastM = contrastM + scipy.signal.convolve2d(imageWorking,k8,'same')**2
+    olderr = np.seterr(divide='ignore')
     try:
         imageWorking = image / scipy.signal.convolve2d(imageWorking,np.ones((7,7)),'same')
     except RuntimeWarning:
-        raise
+        pass
     contrastM = contrastM / imageWorking**2
-    
+    np.seterr(**olderr)    
     cov=scipy.signal.convolve2d(contrastM, np.ones((5,5)), 'same')
     
     return cov
