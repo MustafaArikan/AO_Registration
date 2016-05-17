@@ -64,10 +64,13 @@ def compute_stdev_image(stack):
     #newStack = np.ma.array(results)
     imageStdev = results.std(axis=0)
     imageAvg = results.mean(axis=0)
+    #some values in imageAvg can be 0, create this as a masked array
+    imageAvg = np.ma.MaskedArray(data = imageAvg,
+                                 mask = imageAvg == 0)
     imageNorm = imageAvg / imageAvg.max()
     
     imageRatio = imageStdev / imageNorm
-    #imageRatio[imageRatio > 0.3] = 0.3
+    imageRatio[imageRatio > 0.3] = 0.3
     imageRatio = cv2.medianBlur(imageRatio.astype(np.float32),3)
     
     return imageRatio
