@@ -62,7 +62,7 @@ class FrameStack(object):
         return self.frameIds.tolist().index(id)
         
     def get_id_from_idx(self,idx):
-        """return the index position for frame id
+        """return the id position for frame index
         this could be done directly by querying the frameids list
         """
         return self.frameIds[idx]
