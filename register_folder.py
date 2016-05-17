@@ -38,16 +38,25 @@ def main(filename,out_path=None,create=False):
 
     vid.create_average_frame()
     logging.info('writing mean frame')
-    vid.write_average_frame(os.path.join(out_path,'average.png'))
+    try:
+        vid.write_average_frame(os.path.join(out_path,'average.png'))
+    except ValueError:
+        pass
 
     vid.create_average_frame(type='lucky')
-    logging.info('writing mean frame')
-    vid.write_average_frame(os.path.join(out_path,'lucky.png'))
+    logging.info('writing lucky frame')
+    try:
+        vid.write_average_frame(os.path.join(out_path,'lucky.png'))
+    except ValueError:
+        pass
 
 
     vid.create_stdev_frame()
-    logging.info('writing lucky frame')
-    vid.write_frame(os.path.join(out_path,'stdev.png'),'stdev')
+    logging.info('writing stdev frame')
+    try:
+        vid.write_frame(os.path.join(out_path,'stdev.png'),'stdev')
+    except ValueError:
+        pass
     
     
 
