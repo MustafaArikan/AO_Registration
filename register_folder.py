@@ -32,7 +32,11 @@ def main(filename,out_path=None,create=False):
     tic=timeit.default_timer()
     vid.filter_frames()
     vid.fixed_align_frames()
-    vid.complete_align_parallel()
+    try:
+        vid.complete_align_parallel()
+    except RuntimeError:
+        logging.warning('Failed to align movie, skipping')
+        continue
     logging.info('writing stabalised movie')
     vid.write_video(os.path.join(out_path,'stabalised.avi'))
 

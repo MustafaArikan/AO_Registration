@@ -17,3 +17,15 @@ proj.directory-list = [{'dirloc': loc('test_data'),
                         'recursive': True,
                         'watch_for_changes': True}]
 proj.file-type = 'shared'
+proj.launch-config = {loc('example.py'): ('project',
+        (u'-v',
+         '')),
+                      loc('example2.py'): ('project',
+        (u'-v\n',
+         '')),
+                      loc('procFolder.py'): ('project',
+        (u'-v',
+         '')),
+                      loc('register_folder.py'): ('project',
+        (u'-f "data/" -v',
+         ''))}
