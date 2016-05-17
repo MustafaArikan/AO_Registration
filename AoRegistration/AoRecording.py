@@ -298,7 +298,7 @@ class AoRecording:
         #Check displacement is les than 50 pixels
         good_results = [result for result in results 
                         if abs(result['shift'][1])<=maxDisplacement 
-                        or abs(result['shift'][0]) <= maxDisplacement]
+                        and abs(result['shift'][0]) <= maxDisplacement]
         bad_results = [result['frameid'] for result in results 
                         if abs(result['shift'][1]) > maxDisplacement 
                         or abs(result['shift'][0]) > maxDisplacement]
@@ -662,4 +662,4 @@ class AoRecording:
         #check to see if an error has occured before this
         if not self.b_continue:
             return        
-        self.currentStdevFrame = ComputeStdevImage.compute_stdev_image(self.currentStack)
+        self.currentStdevFrame = ComputeStdevImage.compute_stdev_image(self.data)
