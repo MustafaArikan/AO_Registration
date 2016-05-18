@@ -203,7 +203,7 @@ class AoRecording:
             tempImage = tempImage[midRow - self.templateSize / 2 : midRow + self.templateSize / 2,
                                   midCol - self.templateSize / 2 : midCol + self.templateSize / 2]            
                 
-            displacement = StackTools.find_frame_shift(currImage,
+            displacement = ImageTools.find_frame_shift(currImage,
                                                        tempImage,
                                                        topLeft=[(0,0),
                                                                 (midRow - self.templateSize / 2,midCol - self.templateSize / 2)],
@@ -284,7 +284,7 @@ class AoRecording:
             templateFrame = templateFrame[midRow - self.smallFrameSize : midRow + self.smallFrameSize,
                                           midCol - self.smallFrameSize : midCol + self.smallFrameSize]
         
-            displacement = StackTools.find_frame_shift(targetFrame,
+            displacement = ImageTools.find_frame_shift(targetFrame,
                                                        templateFrame,
                                                        topLeft=[(midRow - self.largeFrameSize,midCol - self.largeFrameSize),
                                                                 (midRow - self.smallFrameSize,midCol - self.smallFrameSize)],
@@ -371,7 +371,7 @@ class AoRecording:
                 largeStrip = targetFrameData[largeRowStart[idxStrip]:largeRowStart[idxStrip]+self.largeSzRow,
                                              largeColStart:largeColStart + self.largeSzCol]
                 
-                displacement = StackTools.find_frame_shift(largeStrip, 
+                displacement = ImageTools.find_frame_shift(largeStrip, 
                                                     smallStrip,
                                                     topLeft=[(largeRowStart[idxStrip],largeColStart),
                                                              (smallRowStart[idxStrip],smallColStart)],

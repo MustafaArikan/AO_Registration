@@ -59,7 +59,7 @@ def _complete_align_frame(image,frameid):
         largeStrip = targetFrameData[largeRowStart[idxStrip]:largeRowStart[idxStrip]+largeSzRow,
                                      largeColStart:largeColStart + largeSzCol]
         
-        displacement = StackTools.find_frame_shift(largeStrip, 
+        displacement = ImageTools.find_frame_shift(largeStrip, 
                                             smallStrip,
                                             topLeft=[(largeRowStart[idxStrip],largeColStart),
                                                      (smallRowStart[idxStrip],smallColStart)],
