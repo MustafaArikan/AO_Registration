@@ -1,6 +1,7 @@
 from nose.tools import *
 import AoRegistration.AoRecording as AoRecording
 import AoRegistration.StackTools as stackTools
+import AoRegistration.ImageTools as imageTools
 import AoRegistration.FrameStack as FrameStack
 import numpy as np
 
@@ -58,7 +59,7 @@ def test_quadrant_detect():
     x[5,5] = 144
     x=x/x.sum()    
     target = (5.7136351459951777, 7.6843718079673131)
-    result = stackTools.quadrant_detect(x)
+    result = imageTools.quadrant_detect(x)
     assert np.allclose(result, target),'myerror'
     
 def test_framestack():
