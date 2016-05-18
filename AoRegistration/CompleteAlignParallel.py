@@ -2,6 +2,7 @@ import multiprocessing as mp
 import numpy as np
 import logging
 import StackTools
+import ImageTools
 import FrameStack
 
 logger = logging.getLogger(__name__)

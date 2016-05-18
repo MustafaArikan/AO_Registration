@@ -199,7 +199,7 @@ class AoRecording:
             currImage = framestack[iFrame - 1,:,:] #target frame
             tempImage = framestack[iFrame,:,:] #template frame
             
-            shear = StackTools.find_frame_shear(currImage, tempImage)
+            shear = ImageTools.find_frame_shear(currImage, tempImage)
             tempImage = tempImage[midRow - self.templateSize / 2 : midRow + self.templateSize / 2,
                                   midCol - self.templateSize / 2 : midCol + self.templateSize / 2]            
                 

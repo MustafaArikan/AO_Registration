@@ -3,10 +3,10 @@ import timeit
 import logging
 import argparse
 
-def main(filename,outfile,create=False):
+def main():
     """
     """
-    logging.info('Reading file:%s',filename)
+    logging.info('Reading file:%s','data/sample.avi')
     vid = AoRecording.AoRecording(filepath='data/sample.avi')
     vid.load_video()
     logging.info('Starting parallel processing')
@@ -44,12 +44,10 @@ def main(filename,outfile,create=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = 'Register frames from an AO video')
     parser.add_argument('-v','--verbose',help='Increase the amount of output', action='store_true')
-    parser.add_argument('-f','--filename',help='full path to file to process', default='data/sample.avi')
-    parser.add_argument('-o','--output',help='Full path to a directory to store the output')
-    parser.add_argument('-c','--create',help='Create output directory if it doesnt exist',action='store_true')
+
     args = parser.parse_args()
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
         
     logging.info('started')
-    main(filename=args.filename)
+    main()
