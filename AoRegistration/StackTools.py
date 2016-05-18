@@ -114,6 +114,29 @@ def getMaskedStack(stack):
     mask = stack.min(axis=0) < 0
     mask = np.tile(mask,[stack.shape[0],1,1])
     return np.ma.masked_array(stack,mask)
+def interlaceStack(stack):
+    """Attempt to fix poor interlacing in a frame stack
+    """
+    logger.info('Fixing interlace')
+    nFrames, nRows, nCols = stack.shape
+    shifts = [ImageTools.getInterlaceShift(stack[iFrame,:,:]) for iFrame in range(nFrames)]
     
-
+    # find the modal shift value
+    shift = int(max(set(shifts), key=shifts.count))
+    logger.debug('Shifting interlace by %s pixels',shift)
+    #allocate a new imageStack
+    newStack = np.zeros((nFrames,nRows,nCols+abs(shift)))
+    even_rows = np.arange(0,nRows,2)
+    odd_rows = np.arange(1,nRows,2)
+    
+    if shift < 0:
+        newStack[:,even_rows,abs(shift):newStack.shape[2]] = stack.data[:,even_rows,:]
+        newStack[:,odd_rows,0:nCols] = stack.data[:,odd_rows,:]
+    elif shift > 0:
+        newStack[:,even_rows,0:nCols] = stack.data[:,even_rows,:]
+        newStack[:,odd_rows,abs(shift):newStack.shape[2]] = stack.data[:,odd_rows,:]
+    else:
+        newStack=stack.data
+        
+    stack.data=newStack
     

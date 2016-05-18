@@ -663,3 +663,5 @@ class AoRecording:
         if not self.b_continue:
             return        
         self.currentStdevFrame = ComputeStdevImage.compute_stdev_image(self.data)
+    def fixInterlace(self):
+        StackTools.interlaceStack(self.data)

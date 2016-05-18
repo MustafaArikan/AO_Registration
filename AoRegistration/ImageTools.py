@@ -425,7 +425,15 @@ def _get_midpoint(norm_sum):
     
     return midpoint
     
-
+def getInterlaceShift(image):
+    """Calculate the row shift in pixels for poorly interlaced images
+    """
+    assert len(image.shape)==2, "Image must be NxM"
+    nrows = image.shape[0]
+    image_odd = image[np.arange(0,nrows,2)]
+    image_even = image[np.arange(1,nrows,2)]
     
+    shifts = find_frame_shift(image_odd,
+                              image_even)
     
-    
+    return shifts['coords'][0]
