@@ -28,8 +28,7 @@ def main(filename,out_path=None,create=False):
         
     vid = AoRecording.AoRecording(filepath=filename)
     vid.load_video()
-    logging.info('Starting parallel processing')
-    tic=timeit.default_timer()
+    vid.fixInterlace()
     vid.filter_frames()
     vid.fixed_align_frames()
     try:
