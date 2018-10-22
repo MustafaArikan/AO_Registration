@@ -21,6 +21,7 @@ sharedSmallSzCol = None
 sharedLargeSzCol = None
 
 def _complete_align_parallel_callback(result):
+    global results
     logger.debug('callback called')
     results.append(result)
 
@@ -37,30 +38,30 @@ def _complete_align_frame(image,frameid):
     largeRowStart = np.asarray(sharedLargeRowStart)
     smallColStart = np.asarray(sharedSmallColStart)[0]
     largeColStart = np.asarray(sharedLargeColStart)[0]
-    largeSzRow = np.asarray(sharedLargeSzRow)[0]
-    largeSzCol = np.asarray(sharedLargeSzCol)[0]
-    smallSzRow = np.asarray(sharedSmallSzRow)[0]
-    smallSzCol = np.asarray(sharedSmallSzCol)[0]
-    
-    
+    largeSzRow = np.asarray(sharedLargeSzRow)
+    largeSzCol = np.asarray(sharedLargeSzCol)
+    smallSzRow = np.asarray(sharedSmallSzRow)
+    smallSzCol = np.asarray(sharedSmallSzCol)
+
+
     #apply a random mask to the processed frame
     mask = np.zeros(image.shape,dtype=np.bool)
     mask[image > 0] = 1
     image = np.ma.array(image,
                         mask=~mask)
     randomData = image.std() * np.random.standard_normal(image.shape) + image.mean()
-    image = (image.data * ~image.mask) + (randomData * image.mask) #no longer a masked array    
-    
-    for idxStrip in range(len(sharedSmallRowStart)):
+    image = (image.data * ~image.mask) + (randomData * image.mask) #no longer a masked array
+
+    for idxStrip in range(len(smallRowStart)):
         #loop through the strips here
         #print('from:{}, to:{}'.format(smallColStart[0],smallColStart[0] + smallSzCol))
         smallStrip = image[smallRowStart[idxStrip]:smallRowStart[idxStrip]+smallSzRow,
                            smallColStart:smallColStart + smallSzCol]
-       
+
         largeStrip = targetFrameData[largeRowStart[idxStrip]:largeRowStart[idxStrip]+largeSzRow,
                                      largeColStart:largeColStart + largeSzCol]
-        
-        displacement = ImageTools.find_frame_shift(largeStrip, 
+
+        displacement = ImageTools.find_frame_shift(largeStrip,
                                             smallStrip,
                                             topLeft=[(largeRowStart[idxStrip],largeColStart),
                                                      (smallRowStart[idxStrip],smallColStart)],
@@ -86,14 +87,14 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     colSizes - (smallColSize,largeColSize)
     numberPointsToAlign - number of strips in each frame
     newCoords - height x width ndarray
-    """        
+    """
     nFrames = alignedData.frameCount
     nrows = alignedData.frameHeight
     ncols = alignedData.frameWidth
     if nFrames <= 1:
         raise RuntimeError('Requires more than one frame')
-    
-    
+
+
     global results
     global timetics
     global sharedTargetFrameData
@@ -113,16 +114,16 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     #apply a mask to the target frame
     mask = np.zeros(targetFrameData.shape,dtype=np.bool)
     mask[targetFrameData > 0] = 1
-    
+
     #convert the targetFrameData to a masked array for simple calculation of means
     targetFrameData = np.ma.array(targetFrameData,
                                   mask=~mask)
     randomData = targetFrameData.std() * np.random.standard_normal(targetFrameData.shape) + targetFrameData.mean()
-    
+
     targetFrameData = (targetFrameData.data * ~targetFrameData.mask) + (randomData * targetFrameData.mask) #no longer a masked array
-          
+
     #target frame and index vectors are also the same in every loop, put them in shared memory too
-    sharedTargetFrameData = mp.Array('d',targetFrameData.ravel(),lock=False)    
+    sharedTargetFrameData = mp.Array('d',targetFrameData.ravel(),lock=False)
     sharedSmallRowStart = mp.Array('i',rowStarts[0],lock=False)
     sharedSmallColStart = mp.Array('i',colStarts[0],lock=False)
     sharedLargeRowStart = mp.Array('i',rowStarts[1],lock=False)
@@ -131,13 +132,14 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     sharedLargeSzRow = mp.Value('i',rowSizes[1],lock=False)
     sharedSmallSzCol = mp.Value('i',colSizes[0],lock=False)
     sharedLargeSzCol = mp.Value('i',colSizes[1],lock=False)
-    
+
     results = []
     pool = mp.Pool()
     for frameId in framesToProcess:
         pool.apply_async(_complete_align_frame,
                          args = (alignedData.get_frame_by_id(frameId),frameId),
                          callback=_complete_align_parallel_callback)
+        # r=_complete_align_frame(alignedData.get_frame_by_id(frameId),frameId)
+        # _complete_align_parallel_callback(r)
     pool.close()
-    pool.join()    
-
+    pool.join()
