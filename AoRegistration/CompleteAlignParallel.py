@@ -4,10 +4,11 @@ import logging
 import StackTools
 import ImageTools
 import FrameStack
+import os
 
 logger = logging.getLogger(__name__)
 
-results = []
+results = {'splines': []}
 timetics = []
 
 sharedTargetFrameData = None
@@ -23,25 +24,47 @@ sharedLargeSzCol = None
 def _complete_align_parallel_callback(result):
     global results
     logger.debug('callback called')
-    results.append(result)
+    #results.append(result)
+    results['splines'].append(result)
 
-def _complete_align_frame(image,frameid):
+def _complete_align_frame(image,frameid, sharedData=None):
     """Perform strip alignment on a frame
     Expects to be called from complete_align_parallel
     Uses some objects placed in shared memory
+        sharedData - {'target': sharedTargetFrameData,
+                      'smallrowstart': sharedSmallRowStart
+                      'smallcolstart': sharedSmallColStart,
+                      'largerowstart': sharedLargeRowStart,
+                      'largecolstart': sharedLargeColStart,
+                      'sharedsmallszrow': sharedSmallSzRow,
+                      'sharedlargeszrow': sharedLargeSzRow,
+                      'sharedsmallszcol': sharedSmallSzCol,
+                      'sharedlargeszcol': sharedLargeSzCol}
     """
     #start building the output list
     result = {'frameid':frameid,'stripResults':[]}
     #rebuild the target image from the shared data
-    targetFrameData = np.asarray(sharedTargetFrameData).reshape(image.shape) #assume that target frame and procFrame are the same shape
-    smallRowStart = np.asarray(sharedSmallRowStart)
-    largeRowStart = np.asarray(sharedLargeRowStart)
-    smallColStart = np.asarray(sharedSmallColStart)[0]
-    largeColStart = np.asarray(sharedLargeColStart)[0]
-    largeSzRow = np.asarray(sharedLargeSzRow)
-    largeSzCol = np.asarray(sharedLargeSzCol)
-    smallSzRow = np.asarray(sharedSmallSzRow)
-    smallSzCol = np.asarray(sharedSmallSzCol)
+    if sharedData:
+        targetFrameData = sharedData['target']
+        smallRowStart = sharedData['smallrowstart']
+        smallColStart = sharedData['smallcolstart']
+        largeRowStart = sharedData['largerowstart']
+        largeColStart = sharedData['largecolstart']
+        smallSzRow = sharedData['smallszrow']
+        largeSzRow = sharedData['largeszrow']
+        smallSzCol = sharedData['smallszcol']
+        largeSzCol = sharedData['largeszcol']
+    else:
+        # need to get these from global variables posix only
+        targetFrameData = np.asarray(sharedTargetFrameData).reshape(image.shape) #assume that target frame and procFrame are the same shape
+        smallRowStart = np.asarray(sharedSmallRowStart)
+        largeRowStart = np.asarray(sharedLargeRowStart)
+        smallColStart = np.asarray(sharedSmallColStart)
+        largeColStart = np.asarray(sharedLargeColStart)
+        largeSzRow = np.asarray(sharedLargeSzRow)
+        largeSzCol = np.asarray(sharedLargeSzCol)
+        smallSzRow = np.asarray(sharedSmallSzRow)
+        smallSzCol = np.asarray(sharedSmallSzCol)
 
 
     #apply a random mask to the processed frame
@@ -95,19 +118,9 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
         raise RuntimeError('Requires more than one frame')
 
 
-    global results
-    global timetics
-    global sharedTargetFrameData
-    global sharedSmallRowStart
-    global sharedSmallColStart
-    global sharedLargeRowStart
-    global sharedLargeColStart
-    global sharedSmallSzRow
-    global sharedLargeSzRow
-    global sharedSmallSzCol
-    global sharedLargeSzCol
     #convert from original stack index to new stack index
     #localTargetFrameIdx = goodFrames.index(targetFrameIdx)
+
     targetFrameData = alignedData.templateFrame
 
     framesToProcess = [frameId for frameId in alignedData.frameIds if not frameId == alignedData.templateFrameId]
@@ -123,23 +136,51 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     targetFrameData = (targetFrameData.data * ~targetFrameData.mask) + (randomData * targetFrameData.mask) #no longer a masked array
 
     #target frame and index vectors are also the same in every loop, put them in shared memory too
-    sharedTargetFrameData = mp.Array('d',targetFrameData.ravel(),lock=False)
-    sharedSmallRowStart = mp.Array('i',rowStarts[0],lock=False)
-    sharedSmallColStart = mp.Array('i',colStarts[0],lock=False)
-    sharedLargeRowStart = mp.Array('i',rowStarts[1],lock=False)
-    sharedLargeColStart = mp.Array('i',colStarts[1],lock=False)
-    sharedSmallSzRow = mp.Value('i',rowSizes[0],lock=False)
-    sharedLargeSzRow = mp.Value('i',rowSizes[1],lock=False)
-    sharedSmallSzCol = mp.Value('i',colSizes[0],lock=False)
-    sharedLargeSzCol = mp.Value('i',colSizes[1],lock=False)
 
-    results = []
-    pool = mp.Pool()
-    for frameId in framesToProcess:
-        pool.apply_async(_complete_align_frame,
-                         args = (alignedData.get_frame_by_id(frameId),frameId),
-                         callback=_complete_align_parallel_callback)
-        # r=_complete_align_frame(alignedData.get_frame_by_id(frameId),frameId)
-        # _complete_align_parallel_callback(r)
+    if os.name == 'posix':
+        global results
+        global timetics
+        global sharedTargetFrameData
+        global sharedSmallRowStart
+        global sharedSmallColStart
+        global sharedLargeRowStart
+        global sharedLargeColStart
+        global sharedSmallSzRow
+        global sharedLargeSzRow
+        global sharedSmallSzCol
+        global sharedLargeSzCol
+
+        sharedTargetFrameData = mp.Array('d',targetFrameData.ravel(),lock=False)
+        sharedSmallRowStart = mp.Array('i',rowStarts[0],lock=False)
+        sharedSmallColStart = mp.Array('i',colStarts[0],lock=False)
+        sharedLargeRowStart = mp.Array('i',rowStarts[1],lock=False)
+        sharedLargeColStart = mp.Array('i',colStarts[1],lock=False)
+        sharedSmallSzRow = mp.Value('i',rowSizes[0],lock=False)
+        sharedLargeSzRow = mp.Value('i',rowSizes[1],lock=False)
+        sharedSmallSzCol = mp.Value('i',colSizes[0],lock=False)
+        sharedLargeSzCol = mp.Value('i',colSizes[1],lock=False)
+
+        pool = mp.Pool()
+        for frameId in framesToProcess:
+            pool.apply_async(_complete_align_frame,
+                             args = (alignedData.get_frame_by_id(frameId),frameId),
+                             callback=_complete_align_parallel_callback)
+    else:
+        sharedData = {'target': targetFrameData,
+                      'smallrowstart': rowStarts[0],
+                      'smallcolstart': colStarts[0],
+                      'largerowstart': rowStarts[1],
+                      'largecolstart': colStarts[1],
+                      'smallszrow': rowSizes[0],
+                      'largeszrow': rowSizes[1],
+                      'smallszcol': colSizes[0],
+                      'largeszcol': colSizes[1]}
+
+        #results = []
+        pool = mp.Pool()
+        for frameId in framesToProcess:
+            pool.apply_async(_complete_align_frame,
+                             args = (alignedData.get_frame_by_id(frameId),frameId, sharedData),
+                             callback=_complete_align_parallel_callback)
     pool.close()
     pool.join()

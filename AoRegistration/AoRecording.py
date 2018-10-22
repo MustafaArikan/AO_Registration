@@ -437,7 +437,8 @@ class AoRecording:
 
         self.timeTics = np.array(timetics)
         self.times = newCoords['times']
-        alignmentSplines = self._make_valid_points(CompleteAlignParallel.results,minCorr)
+
+        alignmentSplines = self._make_valid_points(CompleteAlignParallel.results['splines'],minCorr)
         self.data = self.fast_align_parallel(alignmentSplines)
 
 
