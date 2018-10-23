@@ -24,20 +24,30 @@ This work is based on code kindly shared by:
 
   ## Dependencies
     [python 2.7](http://www.python.com)
-    [SciPy](http://www.SciPy.org)
-    [OpenCV](http://opencv.org/)
+    [SciPy 0.14](http://www.SciPy.org)
+    [OpenCV 2.4](http://opencv.org/)
 
   ## Example usage
 ```python
 import AoRegistration.AoRecording as AoRecording
 
 vid = AoRecording.AoRecording(filepath='data/sample.avi')
+# load the video into memory
 vid.load_video()
+# Perform an initial filter, excludes frames that are too dim (blink)
+#   or contain shear (saccades).
 vid.filter_frames()
+# Perform a rough (translation) alignment
 vid.fixed_align_frames()
+# Calculate the within frame splines used for strip alignment
+
 #vid.complete_align() #for serial processing
 vid.complete_align_parallel() # for parallel processing
+
+# apply the within frame alignment splines to the frames
 vid.fast_align()
+
+# output the registered video (caution: fails silently if output folder doesn't exist)
 vid.write_video('output/output.avi')
 ```
 
