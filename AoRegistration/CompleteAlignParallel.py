@@ -111,6 +111,8 @@ def complete_align_parallel(alignedData,rowStarts,colStarts,rowSizes,colSizes):
     numberPointsToAlign - number of strips in each frame
     newCoords - height x width ndarray
     """
+    global results
+    results = {'splines': []}
     nFrames = alignedData.frameCount
     nrows = alignedData.frameHeight
     ncols = alignedData.frameWidth
