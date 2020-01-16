@@ -114,7 +114,7 @@ class FrameStack(object):
         """Write the current stack to an avi"""
         nframes, height,width = self.data.shape
         
-        fourcc = cv2.cv.CV_FOURCC(*'I420')
+        fourcc = cv2.VideoWriter_fourcc(*'I420')
         vid = cv2.VideoWriter(fpath,fourcc,10,(width,height))
         if sort:
             self.sort()

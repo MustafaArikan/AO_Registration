@@ -89,7 +89,7 @@ class AoRecording:
         """Write the current framestack to an avi"""
         self.data.write_stack(filename)
 
-    def load_video(self, cropInterlace = True):
+    def load_video(self, cropInterlace = False):
         """Loads an AO video
         Loads the video identified by filepath into a nframes height x width numpy array
         PARAMS:
@@ -102,13 +102,14 @@ class AoRecording:
             logger.warning('Failed opening video: %s',self.filepath)
             return
 
-        nframes = cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)
-        frameheight = cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT)
-        framewidth = cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH)
+        nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        frameheight = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        framewidth = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 
         #preallocate a numpy array
         data = np.empty([int(nframes), int(frameheight), int(framewidth)],dtype=np.uint8)
-
+        print ("data shape: " + str(data.shape))
+        
         ret, frame = cap.read() #get the first frame
         if len(frame.shape)>2:
             #frames are RGB format, using only G channel
@@ -116,7 +117,7 @@ class AoRecording:
             RGB=True
 
         while(ret):
-            frame_idx = int(cap.get(cv2.cv.CV_CAP_PROP_POS_FRAMES))
+            frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
             if RGB:
                 data[frame_idx - 1,:,:] = frame[:,:,1]
             else:
@@ -124,9 +125,11 @@ class AoRecording:
             ret, frame = cap.read()
         cap.release()
         if cropInterlace:
+            print ("Nr of frames:"+str(nframes))
             frameSums = data.sum(0)
             midRow = frameSums.shape[1]/2
             r,c = np.where(frameSums[:,0:midRow]==0)
+            print (c)
             left = max(c) + 1
             r,c = np.where(frameSums[:,midRow:]==0)
             right = (min(c) - 1) + midRow
@@ -394,6 +397,7 @@ class AoRecording:
         self.times = newCoords['times']
         alignmentSplines = self._make_valid_points(results,minCorr)
         self.data = self.fast_align(alignmentSplines)
+        return alignmentSplines
 
     def complete_align_parallel(self,minCorr = 0.38):
         """Takes a roughly aligned stack and performs a complete alignment

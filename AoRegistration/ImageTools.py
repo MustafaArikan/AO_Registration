@@ -351,7 +351,7 @@ def find_frame_shift(im1,im2,topLeft=[(0,0),(0,0)],method='fft', applyBlur = Fal
         assert im1.shape[0] >= im2.shape[0], 'Image 2 must be smaller than image 1'
         assert im1.shape[1] >= im2.shape[1], 'Image 2 must be smaller than image 1'
         
-        x_im = cv2.matchTemplate(np.float32(im1), np.float32(im2), cv2.cv.CV_TM_CCORR_NORMED)
+        x_im = cv2.matchTemplate(np.float32(im1), np.float32(im2), cv2.TM_CCORR_NORMED)
         indices = np.unravel_index(x_im.argmax(), x_im.shape)
         
     if attemptSubPixelAlignment:
