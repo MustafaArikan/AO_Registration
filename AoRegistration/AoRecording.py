@@ -33,13 +33,14 @@ class AoRecording:
 
 
 
-    def __init__(self,filepath=None):
+    def __init__(self,filepath=None,filepath2=None):
         """Initialse an AoRecording object
         PARAMS:
         [filepath] = full path to the source file
         filepath
         """
         self.filepath=filepath
+        self.filepath2=filepath2
         self.nframes=0
         self.frameheight=0
         self.framewidth=0
@@ -98,20 +99,43 @@ class AoRecording:
         RGB=False #indicator is video is in RGB format, in which case only use G channel
 
         cap = cv2.VideoCapture(self.filepath)
+        cap2 = cv2.VideoCapture(self.filepath2)
         if not cap.isOpened():
             logger.warning('Failed opening video: %s',self.filepath)
+            return
+            
+        if not cap2.isOpened():
+            logger.warning('Failed opening video: %s',self.filepath2)
             return
 
         nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
         frameheight = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
         framewidth = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        
+        nframes2 = cap2.get(cv2.CAP_PROP_FRAME_COUNT)
+        frameheight2 = cap2.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        framewidth2 = cap2.get(cv2.CAP_PROP_FRAME_WIDTH)
 
         #preallocate a numpy array
         data = np.empty([int(nframes), int(frameheight), int(framewidth)],dtype=np.uint8)
+        data2 = np.empty([int(nframes2), int(frameheight2), int(framewidth2)],dtype=np.uint8)
+        
+        if (nframes2 != nframes or frameheight2 != frameheight or framewidth2 != framewidth):
+            logger.warning('Not same dimensions %s, %s',self.filepath,self.filepath2)
+            return
+            
         print ("data shape: " + str(data.shape))
+        print ("data shape: " + str(data2.shape))
         
         ret, frame = cap.read() #get the first frame
+        ret2, frame2 = cap2.read() #get the first frame
+        
         if len(frame.shape)>2:
+            #frames are RGB format, using only G channel
+            logger.debug('Video is in RGB format, using only G channel')
+            RGB=True
+            
+        if len(frame2.shape)>2:
             #frames are RGB format, using only G channel
             logger.debug('Video is in RGB format, using only G channel')
             RGB=True
@@ -124,6 +148,16 @@ class AoRecording:
                 data[frame_idx -1 ,:,:] = frame[:,:]
             ret, frame = cap.read()
         cap.release()
+        
+        while(ret2):
+            frame_idx2 = int(cap2.get(cv2.CAP_PROP_POS_FRAMES))
+            if RGB:
+                data2[frame_idx2 - 1,:,:] = frame2[:,:,1]
+            else:
+                data2[frame_idx2 -1 ,:,:] = frame2[:,:]
+            ret2, frame2 = cap2.read()
+        cap2.release()
+        
         if cropInterlace:
             print ("Nr of frames:"+str(nframes))
             frameSums = data.sum(0)
@@ -137,8 +171,26 @@ class AoRecording:
             left = min([left,200])
             right = max([right,framewidth-200])
             data = data[:,:,left:right]
+            
+            print ("Nr of frames 2d input :"+str(nframes2))
+            frameSums2 = data.sum(0)
+            midRow2 = frameSums2.shape[1]/2
+            r2,c2 = np.where(frameSums2[:,0:midRow2]==0)
+            print (c2)
+            left2 = max(c2) + 1
+            r2,c2 = np.where(frameSums2[:,midRow2:]==0)
+            right2 = (min(c2) - 1) + midRow2
+            #limit the interlace to a maximum of 200 pixels, otherwise can cause problems with v dark videos
+            left2 = min([left2,200])
+            right2 = max([right2,framewidth2-200])
+            data2 = data2[:,:,left2:right2]
 
+        print ("Loaded and ready: "+str(data.shape))
+        print ("Loaded and ready2: "+str(data2.shape))
+        
         self.data = FrameStack.FrameStack(data)
+        self.data2 = FrameStack.FrameStack(data2)
+        
 
     def write_average_frame(self,filename):
         if self.currentAverageFrame is None:
@@ -173,20 +225,55 @@ class AoRecording:
             return
 
         framestack = self.data
+        framestack2 = self.data2
 
         # calculate mean brightness for each frame,
         #  if framestack is a masked array masked values are ignored
         frame_brightnesses = np.apply_over_axes(np.mean, framestack, [1,2]).flatten()
         max_bright = frame_brightnesses.max()
+        
+        print ("shape of frame_brightnesses " + str(frame_brightnesses.shape))
 
+        frame_brightnesses2 = np.apply_over_axes(np.mean, framestack2, [1,2]).flatten()
+        max_bright2 = frame_brightnesses2.max()
+        
+        print ("shape of frame_brightnesses2 " + str(frame_brightnesses2.shape))
+        
         #find frame index for frames >50% max_bright
         #  frames not in this list will be excluded
         good_brights = np.array(frame_brightnesses > max_bright * 0.5, dtype=np.bool)
+        
+        good_brights2 = np.array(frame_brightnesses2 > max_bright2 * 0.5, dtype=np.bool)
+        
+        print ("shape of good_brights " + str(good_brights.shape))
+        print ("shape of good_brights2 " + str(good_brights2.shape))
+        
         #good_brights = [i for i, val in enumerate(frame_brightnesses) if val > 0.5* max_bright]
         brightestFrames = np.array(frame_brightnesses > max_bright * 0.85, dtype=np.bool)
-
+        
+        brightestFrames2 = np.array(frame_brightnesses2 > max_bright2 * 0.85, dtype=np.bool)
+        
+        print ("shape of brightestFrames " + str(brightestFrames.shape))
+        print ("shape of brightestFrames2 " + str(brightestFrames2.shape))
+        
+        print ("len of brightestFrames " + str(len(brightestFrames)))
+        print ("len of brightestFrames2 " + str(len(brightestFrames2)))
+        
+        print ("shape of brightestFrames[0] " + str(brightestFrames[0].shape))
+        print ("shape of brightestFrames2[0] " + str(brightestFrames2[0].shape))
+        
+        print (brightestFrames)
+        
+        print (brightestFrames2)
+        
         framelist = np.where(good_brights)[0]
+        framelist2 = np.where(good_brights)[0]
+        
+        print ("framelist2", str(framelist2))
+        print ("framelist", str(framelist))
+        
         framestack.filter_frames_by_idx(good_brights) # only going to use good frames from here on.
+        framestack2.filter_frames_by_idx(good_brights) # only going to use good frames from here on.
 
         if len(good_brights) < 1:
             logger.error("No good frames found")
@@ -194,17 +281,28 @@ class AoRecording:
             raise RuntimeError("No good frames found:Brightness too low")
 
         results = []
+        results2 = []
 
         midRow = int(framestack.frameWidth / 2)
         midCol = int(framestack.frameHeight / 2)
+        
+        midRow2 = int(framestack2.frameWidth / 2)
+        midCol2 = int(framestack2.frameHeight / 2)
 
         for iFrame in np.arange(1,len(framelist)):
             currImage = framestack[iFrame - 1,:,:] #target frame
+            currImage2 = framestack2[iFrame - 1,:,:] #target frame
             tempImage = framestack[iFrame,:,:] #template frame
+            tempImage2 = framestack2[iFrame,:,:] #template frame
 
             shear = ImageTools.find_frame_shear(currImage, tempImage)
+            shear2 = ImageTools.find_frame_shear(currImage2, tempImage2)
+            
             tempImage = tempImage[midRow - self.templateSize / 2 : midRow + self.templateSize / 2,
                                   midCol - self.templateSize / 2 : midCol + self.templateSize / 2]
+                                  
+            tempImage2 = tempImage2[midRow2 - self.templateSize / 2 : midRow2 + self.templateSize / 2,
+                                  midCol2 - self.templateSize / 2 : midCol2 + self.templateSize / 2]
 
             displacement = ImageTools.find_frame_shift(currImage,
                                                        tempImage,
@@ -213,12 +311,29 @@ class AoRecording:
                                                        method='xcorr',
                                                        applyBlur=True,
                                                        attemptSubPixelAlignment=False)
+                                                       
+            displacement2 = ImageTools.find_frame_shift(currImage2,
+                                                       tempImage2,
+                                                       topLeft=[(0,0),
+                                                                (midRow2 - self.templateSize / 2,midCol2 - self.templateSize / 2)],
+                                                       method='xcorr',
+                                                       applyBlur=True,
+                                                       attemptSubPixelAlignment=False)
+                                                       
             motion = (displacement['coords'][0]**2 + displacement['coords'][0]**2)**0.5
+            motion2 = (displacement['coords'][0]**2 + displacement['coords'][0]**2)**0.5
+            
             results.append({'frameid':framestack.frameIds[iFrame],
                             'shear':shear['shearval'],
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords'],
                             'motion':motion})
+                            
+            results2.append({'frameid':framestack2.frameIds[iFrame],
+                            'shear':shear['shearval'],
+                            'correlation':displacement['maxcorr'],
+                            'shift':displacement['coords'],
+                            'motion':motion2})
         #filter frames where sheer > 20
         #results = [r for r in results if r['motion'] <= 20]
         #if len(results) < 1:
@@ -228,6 +343,7 @@ class AoRecording:
 
         #data for frame 0 is missing, use the data from the first remaining frame
         #r=[r for r in results if r['frameid'] == 1]
+        
         if not results:
             raise RuntimeError('Could not get displacements')
         r =dict(results[0])    #make a copy of this item
@@ -235,6 +351,12 @@ class AoRecording:
         r['shift']=(0,0)
         r['motion']=0
         results.append(r)
+        
+        r2 =dict(results2[0])    #make a copy of this item
+        r2['frameid']=framelist2[0]
+        r2['shift']=(0,0)
+        r2['motion']=0
+        results2.append(r2)
 
         maxCorr = max([result['correlation'] for result in results])
 
@@ -254,7 +376,17 @@ class AoRecording:
             self.data.filter_frames_by_id(goodFrames)
             self.data.templateFrameId = goodFrames[frame_brightnesses[goodFrames].argmax()] #return the brightest of the remaining frames as a potential template
             self.filterResults = results    #store this for debugging
+            
+            goodFrames2 = [result2['frameid'] for result2 in results2 if result2['shear'] < 20 and result2['correlation'] > 0.5 * maxCorr and result2['motion'] < 50 ]
+            badFrames2 = [frameid for frameid in self.data.frameIds if frameid not in goodFrames2]
+            if not goodFrames2:
+                logger.warning('No good frames found')
+                raise RuntimeError('No good frames found:Group criteria (Shear, Correlation, Motion) not met.')
 
+            logger.info('Removing frames {} due to brightness or shear'.format(badFrames2))
+            self.data2.filter_frames_by_id(goodFrames2)
+            self.data2.templateFrameId = goodFrames2[frame_brightnesses2[goodFrames2].argmax()] #return the brightest of the remaining frames as a potential template
+            self.filterResults2 = results2    #store this for debugging
 
     def fixed_align_frames(self,maxDisplacement=50):
         '''perform fixed alignment on the framestack
@@ -268,17 +400,30 @@ class AoRecording:
             return
 
         framesToProcess = [i for i in self.data.frameIds if i != self.data.templateFrameId]
+        framesToProcess2 = [i for i in self.data2.frameIds if i != self.data2.templateFrameId]
 
         midRow = int(self.data.frameWidth / 2)
         midCol = int(self.data.frameHeight / 2)
+        
+        midRow2 = int(self.data2.frameWidth / 2)
+        midCol2 = int(self.data2.frameHeight / 2)
 
         targetFrame = self.data.templateFrame
         targetFrame = targetFrame[midRow - self.largeFrameSize : midRow + self.largeFrameSize,
                                   midCol - self.largeFrameSize : midRow + self.largeFrameSize]
+                                  
+        targetFrame2 = self.data2.templateFrame
+        targetFrame2 = targetFrame2[midRow2 - self.largeFrameSize : midRow2 + self.largeFrameSize,
+                                  midCol2 - self.largeFrameSize : midRow2 + self.largeFrameSize]
 
         results = []
+        results2 = []
         #ensure the target frame is included in the output
         results.append({'frameid':self.data.templateFrameId,
+                        'correlation':1,
+                        'shift':(0,0)})
+                        
+        results2.append({'frameid':self.data2.templateFrameId,
                         'correlation':1,
                         'shift':(0,0)})
 
@@ -286,6 +431,10 @@ class AoRecording:
             templateFrame = self.data.get_frame_by_id(iFrame)
             templateFrame = templateFrame[midRow - self.smallFrameSize : midRow + self.smallFrameSize,
                                           midCol - self.smallFrameSize : midCol + self.smallFrameSize]
+                                          
+            templateFrame2 = self.data2.get_frame_by_id(iFrame)
+            templateFrame2 = templateFrame2[midRow2 - self.smallFrameSize : midRow2 + self.smallFrameSize,
+                                          midCol2 - self.smallFrameSize : midCol2 + self.smallFrameSize]
 
             displacement = ImageTools.find_frame_shift(targetFrame,
                                                        templateFrame,
@@ -294,17 +443,39 @@ class AoRecording:
                                                        applyBlur=True,
                                                        method='xcorr',
                                                        attemptSubPixelAlignment=False)
+                                                       
+            displacement2 = ImageTools.find_frame_shift(targetFrame2,
+                                                       templateFrame2,
+                                                       topLeft=[(midRow2 - self.largeFrameSize,midCol2 - self.largeFrameSize),
+                                                                (midRow2 - self.smallFrameSize,midCol2 - self.smallFrameSize)],
+                                                       applyBlur=True,
+                                                       method='xcorr',
+                                                       attemptSubPixelAlignment=False)
 
             results.append({'frameid':iFrame,
+                            'correlation':displacement['maxcorr'],
+                            'shift':displacement['coords']})
+                            
+            results2.append({'frameid':iFrame,
                             'correlation':displacement['maxcorr'],
                             'shift':displacement['coords']})
         #Check displacement is les than 50 pixels
         good_results = [result for result in results
                         if abs(result['shift'][1])<=maxDisplacement
                         and abs(result['shift'][0]) <= maxDisplacement]
+                        
+        good_results2 = [result2 for result2 in results2
+                        if abs(result2['shift'][1])<=maxDisplacement
+                        and abs(result2['shift'][0]) <= maxDisplacement]
+                        
         bad_results = [result['frameid'] for result in results
                         if abs(result['shift'][1]) > maxDisplacement
                         or abs(result['shift'][0]) > maxDisplacement]
+                        
+        bad_results2 = [result2['frameid'] for result2 in results2
+                        if abs(result2['shift'][1]) > maxDisplacement
+                        or abs(result2['shift'][0]) > maxDisplacement]
+                        
         logger.info('Removing frames {} for too large displacements'.format(bad_results))
         if not good_results:
             #no good frames found
@@ -313,9 +484,12 @@ class AoRecording:
 
         alignedData = StackTools.apply_displacements(self.data,good_results)
         self.data = alignedData
+        
+        alignedData2 = StackTools.apply_displacements(self.data2,good_results2)
+        self.data2 = alignedData2
 
         self.currentStack = alignedData
-
+        self.currentStack2 = alignedData2
 
     def complete_align(self,minCorr = 0.38):
         """Takes a roughly aligned stack and performs a complete alignment
@@ -325,12 +499,22 @@ class AoRecording:
             logger.warning('Aborting:No good frames found')
             return
         nrows,ncols = self.data.frameHeight, self.data.frameWidth
+        nrows2,ncols2 = self.data2.frameHeight, self.data2.frameWidth
 
         targetFrameData = self.data.templateFrame
+        targetFrameData2 = self.data2.templateFrame
         framesToProcess = [frameid for frameid in self.data.frameIds if not frameid == self.data.templateFrameId]
+        framesToProcess2 = [frameid for frameid in self.data2.frameIds if not frameid == self.data2.templateFrameId]
+        
+        print ("framesToProcess :"+str(framesToProcess))
+        print ("framesToProcess2 :"+str(framesToProcess2))
+        
         #apply a mask to the target frame
         mask = np.zeros(targetFrameData.shape,dtype=np.bool)
         mask[targetFrameData > 0] = 1
+        
+        mask2 = np.zeros(targetFrameData2.shape,dtype=np.bool)
+        mask2[targetFrameData2 > 0] = 1
 
         #convert the targetFrameData to a masked array for simple calculation of means
         targetFrameData = np.ma.array(targetFrameData,
@@ -338,10 +522,21 @@ class AoRecording:
         randomData = targetFrameData.std() * np.random.standard_normal(targetFrameData.shape) + targetFrameData.mean()
 
         targetFrameData = (targetFrameData.data * ~targetFrameData.mask) + (randomData * targetFrameData.mask) #no longer a masked array
+        
+        #convert the targetFrameData to a masked array for simple calculation of means
+        targetFrameData2 = np.ma.array(targetFrameData2,
+                                      mask=~mask2)
+        randomData2 = targetFrameData2.std() * np.random.standard_normal(targetFrameData2.shape) + targetFrameData2.mean()
+
+        targetFrameData2 = (targetFrameData2.data * ~targetFrameData2.mask) + (randomData2 * targetFrameData2.mask) #no longer a masked array
 
         #setup the row indices
         defaultStep = int((nrows - self.smallSzRow + 1) / (self.numberPointsToAlign))
         smallRowStart = np.array(range(self.numberPointsToAlign)) * defaultStep
+        
+        #setup the row indices
+        defaultStep2 = int((nrows2 - self.smallSzRow + 1) / (self.numberPointsToAlign))
+        smallRowStart2 = np.array(range(self.numberPointsToAlign)) * defaultStep2
 
         #the large rows should be centered on the small rows
         halfDifference = int((self.largeSzRow - self.smallSzRow) / 2)
@@ -352,8 +547,19 @@ class AoRecording:
 
         smallColStart = (ncols / 2) - (self.smallSzCol / 2)
         largeColStart = (ncols / 2) - (self.largeSzCol / 2)
+        
+        #the large rows should be centered on the small rows
+        halfDifference2 = int((self.largeSzRow - self.smallSzRow) / 2)
+        largeRowStart2 = smallRowStart2 - halfDifference2 # this gives some values out of bounds
+        largeRowStart2[largeRowStart2 < 0] = 0
+        maxRowStart2 = nrows2 - self.largeSzRow
+        largeRowStart2[largeRowStart2 > maxRowStart2] = maxRowStart2
+
+        smallColStart2 = (ncols2 / 2) - (self.smallSzCol / 2)
+        largeColStart2 = (ncols2 / 2) - (self.largeSzCol / 2)
 
         results = []
+        results2 = []
         for frameId in framesToProcess:
             #loop through all the frames here
             #need to generate a new mask for each frame
@@ -365,6 +571,18 @@ class AoRecording:
             randomData = image.std() * np.random.standard_normal(image.shape) + image.mean()
             image = (image.data * ~image.mask) + (randomData * image.mask) #no longer a masked array
             results.append({'frameid':frameId,'stripResults':[]})
+            
+            #loop through all the frames here
+            #need to generate a new mask for each frame
+            image2 = self.data2.get_frame_by_id(frameId)
+            mask2 = np.zeros(image2.shape,dtype=np.bool)
+            mask2[image2 > 0] = 1
+            image2 = np.ma.array(image2,
+                                mask=~mask2)
+            randomData2 = image2.std() * np.random.standard_normal(image2.shape) + image2.mean()
+            image2 = (image2.data * ~image2.mask) + (randomData2 * image2.mask) #no longer a masked array
+            results2.append({'frameid':frameId,'stripResults':[]})
+            
             for idxStrip in range(len(smallRowStart)):
                 #loop through the strips here
                 stripResults = [result['stripResults'] for result in results if result['frameid'] == frameId][0]
@@ -386,18 +604,50 @@ class AoRecording:
                 #displacement['coords'] = (coords[0] + largeRowStart[idxStrip],
                                           #coords[1] + largeColStart)
                 stripResults.append(displacement)
+                
+                #loop through the strips here
+                stripResults2 = [result2['stripResults'] for result2 in results2 if result2['frameid'] == frameId][0]
+                smallStrip2 = image2[smallRowStart2[idxStrip]:smallRowStart2[idxStrip]+self.smallSzRow,
+                                   smallColStart2:smallColStart2 + self.smallSzCol]
+
+                largeStrip2 = targetFrameData2[largeRowStart2[idxStrip]:largeRowStart2[idxStrip]+self.largeSzRow,
+                                             largeColStart2:largeColStart2 + self.largeSzCol]
+
+                displacement2 = ImageTools.find_frame_shift(largeStrip2,
+                                                    smallStrip2,
+                                                    topLeft=[(largeRowStart2[idxStrip],largeColStart2),
+                                                             (smallRowStart2[idxStrip],smallColStart2)],
+                                                    method='xcorr',
+                                                    applyBlur=True,
+                                                    attemptSubPixelAlignment=True)
+                #the offsets returned here are for the small strip within the large strip
+                #coords = displacement['coords']
+                #displacement['coords'] = (coords[0] + largeRowStart[idxStrip],
+                                          #coords[1] + largeColStart)
+                stripResults2.append(displacement)
 
         newCoords = self._get_coords(nrows, ncols)
         timetics=[]
         for jndx in range(self.numberPointsToAlign):
             timetics.append(newCoords['times'][(smallRowStart[jndx]+int(self.smallSzRow/2)),
                                                (smallColStart+int(self.smallSzCol/2)-1)])
+                                               
+        newCoords2 = self._get_coords(nrows2, ncols2)
+        timetics2=[]
+        for jndx in range(self.numberPointsToAlign):
+            timetics2.append(newCoords['times'][(smallRowStart2[jndx]+int(self.smallSzRow/2)),
+                                               (smallColStart2+int(self.smallSzCol/2)-1)])
 
         self.timeTics = np.array(timetics)
         self.times = newCoords['times']
         alignmentSplines = self._make_valid_points(results,minCorr)
-        self.data = self.fast_align(alignmentSplines)
-        return alignmentSplines
+        self.data, self.data2 = self.fast_align(alignmentSplines)
+        
+        self.timeTics2 = np.array(timetics2)
+        self.times2 = newCoords2['times']
+        #alignmentSplines2 = self._make_valid_points(results2,minCorr)
+        #self.data2 = self.fast_align(alignmentSplines)
+        return alignmentSplines, alignmentSplines
 
     def complete_align_parallel(self,minCorr = 0.38):
         """Takes a roughly aligned stack and performs a complete alignment
@@ -588,10 +838,128 @@ class AoRecording:
 
         nrows = self.data.frameHeight
         ncols = self.data.frameWidth
+        
+        nrows2 = self.data.frameHeight
+        ncols2 = self.data.frameWidth
+
+        nframes = len(alignmentSplines)
+        nframes2 = len(alignmentSplines)
+
+        templateFrameIdx = self.data.get_idx_from_id(self.data.templateFrameId)
+        templateFrameIdx2 = self.data2.get_idx_from_id(self.data2.templateFrameId)
+
+        outputSizeRows = nrows + 2*outputmargin
+        outputSizeCols = ncols + 2*outputmargin
+        
+        outputSizeRows2 = nrows2 + 2*outputmargin
+        outputSizeCols2 = ncols2 + 2*outputmargin
+
+        outstack = np.ones((nframes + 1, outputSizeRows, outputSizeCols))
+        outstack = outstack * -1
+        #insert the template frame unchanged in first position
+        outstack[templateFrameIdx,
+                 outputmargin:outputmargin+nrows,
+                 outputmargin:outputmargin+ncols] = self.data.templateFrame
+                 
+        outstack2 = np.ones((nframes2 + 1, outputSizeRows2, outputSizeCols2))
+        outstack2 = outstack2 * -1
+        #insert the template frame unchanged in first position
+        outstack2[templateFrameIdx2,
+                 outputmargin:outputmargin+nrows2,
+                 outputmargin:outputmargin+ncols2] = self.data2.templateFrame
+
+        interiorMask = outstack[templateFrameIdx,:,:] > -0.001 #there has to be a better way to do this.
+        interiorMask2 = outstack2[templateFrameIdx2,:,:] > -0.001 #there has to be a better way to do this.
+
+        mask = self.data.templateFrame > 0   #this mask is the size of the rough aligned images,true over the region of the template image, we will use it to ensure we only sample valid points
+        mask_2 = self.data2.templateFrame > 0   #this mask is the size of the rough aligned images,true over the region of the template image, we will use it to ensure we only sample valid points
+
+        newCoords = self._get_coords(self.data.frameHeight,
+                                     self.data.frameWidth)
+        times = newCoords['times']
+        times = times.ravel()
+        
+        newCoords2 = self._get_coords(self.data2.frameHeight,
+                                     self.data2.frameWidth)
+        times2 = newCoords2['times']
+        times2 = times2.ravel()
+
+        for frame in alignmentSplines:
+            print ("Debug: "+str(frame['frameid']))
+            frameIdx = self.data.get_idx_from_id(frame['frameid'])
+
+            logging.debug('Aligning frame{}'.format(frame['frameid']))
+
+            srcImg = self.data.get_frame_by_id(frame['frameid']) * mask
+            srcImg = srcImg + ((srcImg==0) * -1)
+
+            tmpFrame = np.ones(interiorMask.shape) * -1
+            tmpFrame = tmpFrame + interiorMask
+
+            newx = frame['ppx'](times).reshape(nrows,ncols)
+            newy = frame['ppy'](times).reshape(nrows,ncols)
+
+            finalCols = np.int64(np.round(newCoords['collocs'] + newx + outputmargin))
+            finalRows = np.int64(np.round(newCoords['rowlocs'] + newy + outputmargin))
+
+            mask2 = mask * (finalRows > 0.5)
+            mask2 = mask2 * (finalRows < outputSizeRows)
+            mask2 = mask2 * (finalCols > 0.5)
+            mask2 = mask2 *(finalCols < outputSizeCols)
+
+            validRows, validCols = np.where(mask2)
+            
+            print ("Debug2: "+str(frame['frameid']))
+            frameIdx2 = self.data2.get_idx_from_id(frame['frameid'])
+
+            logging.debug('Aligning frame{}'.format(frame['frameid']))
+
+            srcImg2 = self.data2.get_frame_by_id(frame['frameid']) * mask
+            srcImg2 = srcImg2 + ((srcImg2==0) * -1)
+
+            tmpFrame2 = np.ones(interiorMask.shape) * -1
+            tmpFrame2 = tmpFrame2 + interiorMask2
+
+            newx2 = frame['ppx'](times).reshape(nrows2,ncols2)
+            newy2 = frame['ppy'](times).reshape(nrows2,ncols2)
+
+            finalCols2 = np.int64(np.round(newCoords2['collocs'] + newx2 + outputmargin))
+            finalRows2 = np.int64(np.round(newCoords2['rowlocs'] + newy2 + outputmargin))
+
+            mask2_2 = mask_2 * (finalRows2 > 0.5)
+            mask2_2 = mask2_2 * (finalRows2 < outputSizeRows2)
+            mask2_2 = mask2_2 * (finalCols2 > 0.5)
+            mask2_2 = mask2_2 *(finalCols2 < outputSizeCols2)
+
+            validRows2, validCols2 = np.where(mask2_2)
+
+            for idx in range(len(validRows)):
+                #for each valid pixel, take it from the source image and place it in the new location
+                tmpFrame[finalRows[validRows[idx],validCols[idx]],
+                         finalCols[validRows[idx],validCols[idx]]] = srcImg[validRows[idx],
+                                                                            validCols[idx]]
+                tmpFrame2[finalRows2[validRows2[idx],validCols2[idx]],
+                         finalCols2[validRows2[idx],validCols2[idx]]] = srcImg2[validRows2[idx],
+                                                                            validCols2[idx]]
+
+            outstack[frameIdx,:,:] = tmpFrame
+            outstack2[frameIdx,:,:] = tmpFrame2
+
+        return FrameStack.FrameStack(outstack,
+                                     frameIds = self.data.frameIds,
+                                     templateFrame = self.data.templateFrameId), FrameStack.FrameStack(outstack2,
+                                     frameIds = self.data.frameIds,
+                                     templateFrame = self.data2.templateFrameId)
+                                     
+    def fast_align_second_channel(self,alignmentSplines,fixed_stack):
+        outputmargin = 30
+
+        nrows = fixed_stack.data.frameHeight
+        ncols = fixed_stack.data.frameWidth
 
         nframes = len(alignmentSplines)
 
-        templateFrameIdx = self.data.get_idx_from_id(self.data.templateFrameId)
+        templateFrameIdx = fixed_stack.data.get_idx_from_id(fixed_stack.data.templateFrameId)
 
         outputSizeRows = nrows + 2*outputmargin
         outputSizeCols = ncols + 2*outputmargin
@@ -607,17 +975,18 @@ class AoRecording:
 
         mask = self.data.templateFrame > 0   #this mask is the size of the rough aligned images,true over the region of the template image, we will use it to ensure we only sample valid points
 
-        newCoords = self._get_coords(self.data.frameHeight,
-                                     self.data.frameWidth)
+        newCoords = self._get_coords(fixed_stack.data.frameHeight,
+                                     fixed_stack.data.frameWidth)
         times = newCoords['times']
         times = times.ravel()
 
         for frame in alignmentSplines:
-            frameIdx = self.data.get_idx_from_id(frame['frameid'])
+            print ("Debug: "+str(frame['frameid']))
+            frameIdx = fixed_stack.data.get_idx_from_id(frame['frameid'])
 
             logging.debug('Aligning frame{}'.format(frame['frameid']))
 
-            srcImg = self.data.get_frame_by_id(frame['frameid']) * mask
+            srcImg = fixed_stack.data.get_frame_by_id(frame['frameid']) * mask
             srcImg = srcImg + ((srcImg==0) * -1)
 
             tmpFrame = np.ones(interiorMask.shape) * -1
